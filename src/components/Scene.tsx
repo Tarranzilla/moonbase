@@ -8,10 +8,12 @@ import Moon from './Moon';
 import { useGameStore } from '@/store/useGameStore';
 
 export default function Scene() {
+  const autoRotate = useGameStore((state) => state.autoRotate);
+
   return (
     <div className="absolute inset-0 z-0">
       <Canvas 
-        camera={{ position: [0, 0, 15], fov: 45 }}
+        camera={{ position: [0, 0, 15], fov: 45, far: 3000 }}
         onPointerMissed={() => useGameStore.getState().setSelectedCell(null)}
       >
         <color attach="background" args={['#050505']} />
@@ -23,7 +25,7 @@ export default function Scene() {
           enablePan={false} 
           minDistance={6} 
           maxDistance={25} 
-          autoRotate 
+          autoRotate={autoRotate}
           autoRotateSpeed={0.5} 
         />
         <EffectComposer>

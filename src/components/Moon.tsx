@@ -1,24 +1,178 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { ThreeEvent } from '@react-three/fiber';
+import { useState, useMemo, useRef } from 'react';
+import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '@/store/useGameStore';
 import Engineers from './Engineers';
+
+const sunShader = {
+  vertexShader: `
+    varying vec3 vWorldNormal;
+    varying vec3 vWorldPosition;
+    void main() {
+      vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPos.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vWorldNormal;
+    varying vec3 vWorldPosition;
+    uniform vec3 uSunPosition;
+    uniform vec3 uEarthPosition;
+    uniform float uSunRadius;
+    uniform float uEarthRadius;
+
+    void main() {
+      vec3 dirToSun = normalize(uSunPosition - vWorldPosition);
+      vec3 dirToEarth = normalize(uEarthPosition - vWorldPosition);
+      
+      // Calculate angular radius of bodies from this exact pixel
+      float distSun = length(uSunPosition - vWorldPosition);
+      float distEarth = length(uEarthPosition - vWorldPosition);
+      
+      float r_sun = asin(uSunRadius / distSun);
+      float r_earth = asin(uEarthRadius / distEarth);
+      
+      // Calculate angular separation between Sun and Earth centers (clamped to prevent NaN)
+      float theta = acos(clamp(dot(dirToSun, dirToEarth), -1.0, 1.0));
+      
+      // Calculate eclipse occlusion (penumbra smoothstep)
+      // 1.0 = Fully illuminated, 0.0 = Total eclipse
+      float sunVisibility = smoothstep(r_earth - r_sun, r_earth + r_sun, theta);
+      
+      // Calculate diffuse lighting (facing the sun)
+      float light = dot(vWorldNormal, dirToSun);
+      
+      // Apply physical occlusion
+      light = light * sunVisibility;
+      
+      // Smooth terminator line for illumination (hatch is on the light side)
+      float illuminated = smoothstep(-0.1, 0.1, light);
+      
+      // Cross-hatch pattern on screen coordinates for uniform retro look
+      float scale = 0.4;
+      float hatch1 = sin((gl_FragCoord.x + gl_FragCoord.y) * scale);
+      float hatch2 = sin((gl_FragCoord.x - gl_FragCoord.y) * scale);
+      
+      // Combine into a strict line pattern (higher threshold = thinner lines)
+      float pattern = smoothstep(0.92, 0.98, hatch1) + smoothstep(0.92, 0.98, hatch2);
+      pattern = clamp(pattern, 0.0, 1.0);
+      
+      // Greenish illumination color
+      vec3 lightColor = vec3(0.0, 0.15, 0.0);
+      
+      // Base opacity cut in half again, faint lines
+      float alpha = illuminated * (0.05 + pattern * 0.1); 
+      
+      gl_FragColor = vec4(lightColor, alpha);
+    }
+  `
+};
+
+const earthShader = {
+  vertexShader: `
+    varying vec3 vWorldPosition;
+    void main() {
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPos.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vWorldPosition;
+    uniform vec3 uSunPosition;
+
+    void main() {
+      // Vectors from current point on Earth to Sun and Moon(origin)
+      vec3 dirToSun = normalize(uSunPosition - vWorldPosition);
+      vec3 dirToMoon = normalize(vec3(0.0) - vWorldPosition);
+      
+      float distSun = length(uSunPosition - vWorldPosition);
+      float distMoon = length(vec3(0.0) - vWorldPosition);
+      
+      float r_sun = asin(4.5 / distSun); // Sun physical radius = 4.5
+      float r_moon = asin(5.0 / distMoon); // Moon physical radius = 5.0
+      
+      // Angle between Sun and Moon from this pixel (clamped to prevent NaN)
+      float theta = acos(clamp(dot(dirToSun, dirToMoon), -1.0, 1.0));
+      
+      // Calculate eclipse shadow (Moon blocking Sun)
+      float sunVisibility = smoothstep(max(0.0, r_moon - r_sun), r_moon + r_sun, theta);
+      
+      vec3 earthColor = vec3(0.0, 0.66, 1.0); // #00aaff base color
+      
+      // Apply shadow with 10% ambient brightness so it's never pitch black
+      vec3 finalColor = earthColor * (0.1 + 0.9 * sunVisibility);
+      
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
+};
 
 export default function Moon() {
   const setSelectedCell = useGameStore((state) => state.setSelectedCell);
   const selectedCellId = useGameStore((state) => state.selectedCellId);
 
   const [hoveredFace, setHoveredFace] = useState<number | null>(null);
+  const sunRef = useRef<THREE.Group>(null);
 
-  // We use useMemo to create the geometry once
+  // Memoize materials and geometry so they don't recreate on every render
+  const moonMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#00ff00', wireframe: true }), []);
+  
+  const shadowMaterial = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: sunShader.vertexShader,
+    fragmentShader: sunShader.fragmentShader,
+    uniforms: {
+      uSunPosition: { value: new THREE.Vector3(1000, 0, 0) },
+      uEarthPosition: { value: new THREE.Vector3(-400, 0, 0) },
+      uSunRadius: { value: 4.5 },
+      uEarthRadius: { value: 6.6 }
+    },
+    transparent: true,
+    depthWrite: false,
+  }), []);
+
+  const earthMaterial = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: earthShader.vertexShader,
+    fragmentShader: earthShader.fragmentShader,
+    uniforms: {
+      uSunPosition: { value: new THREE.Vector3(1000, 0, 0) }
+    }
+  }), []);
+
   const geometry = useMemo(() => {
     const geo = new THREE.IcosahedronGeometry(5, 4);
     geo.computeVertexNormals();
     return geo;
   }, []);
+
+  // Update sun direction based on gameTime in useFrame to avoid React state re-renders
+  useFrame(() => {
+    const gameTime = useGameStore.getState().gameTime;
+    
+    // 1 lunar day = 28 in-game days
+    // 28 days = 28 * 24 * 60 * 60 * 1000 = 2,419,200,000 ms
+    const LUNAR_CYCLE_MS = 28 * 24 * 60 * 60 * 1000;
+    
+    // Calculate rotation angle (theta)
+    const theta = ((gameTime % LUNAR_CYCLE_MS) / LUNAR_CYCLE_MS) * Math.PI * 2;
+    
+    // Calculate 3D position
+    const sunPos = new THREE.Vector3(Math.cos(theta), 0, Math.sin(theta)).multiplyScalar(1000);
+    const earthPos = new THREE.Vector3(-400, 0, 0);
+    
+    shadowMaterial.uniforms.uSunPosition.value.copy(sunPos);
+    shadowMaterial.uniforms.uEarthPosition.value.copy(earthPos);
+    earthMaterial.uniforms.uSunPosition.value.copy(sunPos);
+    
+    if (sunRef.current) {
+      sunRef.current.position.copy(sunPos);
+    }
+  });
 
   const hatchedMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -321,10 +475,38 @@ export default function Moon() {
         </group>
       )}
 
-      {/* Base solid sphere underneath to catch rays better if needed, or just for visual depth */}
+      {/* Base solid sphere underneath for visual depth */}
       <mesh geometry={geometry}>
         <meshBasicMaterial color="#000000" />
       </mesh>
+
+      {/* Illumination overlay representing the lit side of the moon */}
+      <mesh geometry={geometry} material={shadowMaterial} scale={1.002} />
+
+      {/* Distant Sun Marker - Very far away */}
+      <group ref={sunRef}>
+        <Billboard>
+          <mesh>
+            <circleGeometry args={[4.5, 32]} />
+            <meshBasicMaterial color="#00ff00" />
+          </mesh>
+          <Text position={[0, 12.0, 0]} fontSize={8.75} color="#00ff00" anchorX="center" anchorY="bottom" fillOpacity={0.9}>
+            SUN
+          </Text>
+        </Billboard>
+      </group>
+
+      {/* Distant Earth Marker - Stationary due to tidal locking */}
+      <group position={[-400, 0, 0]}>
+        <Billboard>
+          <mesh material={earthMaterial}>
+            <circleGeometry args={[6.6, 32]} />
+          </mesh>
+          <Text position={[0, 8.0, 0]} fontSize={3.5} color="#00aaff" anchorX="center" anchorY="bottom" fillOpacity={0.9}>
+            EARTH
+          </Text>
+        </Billboard>
+      </group>
 
       <Engineers geometry={geometry} />
     </group>

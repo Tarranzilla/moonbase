@@ -1,6 +1,8 @@
 'use client';
 
 import { useGameStore } from '@/store/useGameStore';
+import Clock from './Clock';
+import CameraControls from './CameraControls';
 
 function formatCoords(lat: number, lon: number) {
   const latDir = lat >= 0 ? 'N' : 'S';
@@ -54,6 +56,12 @@ export default function TerminalUI() {
         </h1>
         <p className="text-sm opacity-80">OFFLINE SANDBOX // V0.1.0</p>
         <div className="h-px w-full max-w-4xl bg-green-500/50 mt-2" />
+      </div>
+
+      {/* Top Right: Clock and Camera Controls */}
+      <div className="absolute top-6 right-6 flex flex-col gap-2">
+        <Clock />
+        <CameraControls />
       </div>
 
       {/* Middle/Bottom Layout */}
@@ -114,13 +122,12 @@ export default function TerminalUI() {
           </h2>
           {selectedCellId ? (
             <div className="space-y-1">
-              <p>TARGET SECTOR: <span className="font-bold text-green-400">[{selectedCellId}]</span>
-                {selectedCoordinates && (
-                  <span className="ml-3 text-green-600/80 text-xs">
-                    {formatCoords(selectedCoordinates.lat, selectedCoordinates.lon)}
-                  </span>
-                )}
-              </p>
+              <p>TARGET SECTOR: <span className="font-bold text-green-400">[{selectedCellId}]</span></p>
+              {selectedCoordinates && (
+                <p className="text-green-600/80 text-xs pb-1">
+                  {formatCoords(selectedCoordinates.lat, selectedCoordinates.lon)}
+                </p>
+              )}
               <p>STATUS: <span className="animate-pulse text-green-300">UNEXPLORED</span></p>
               <p className="text-xs opacity-70 mt-2">Awaiting engineering deployment...</p>
             </div>

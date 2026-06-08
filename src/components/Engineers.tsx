@@ -35,7 +35,7 @@ function getFaceCenterAndNormal(geometry: THREE.BufferGeometry, faceIndex: numbe
 }
 
 export default function Engineers({ geometry }: EngineersProps) {
-  const { teams, setTeamPath, updateTeamProgress, setSelectedTeam, selectedTeamId } = useGameStore();
+  const { teams, setTeamPath, updateTeamProgress, setSelectedTeam, selectedTeamId, timeScale } = useGameStore();
   
   const graph = useMemo(() => buildAdjacencyGraph(geometry), [geometry]);
 
@@ -46,6 +46,7 @@ export default function Engineers({ geometry }: EngineersProps) {
           key={team.id} 
           team={team} 
           teams={teams}
+          timeScale={timeScale}
           geometry={geometry} 
           graph={graph} 
           setTeamPath={setTeamPath}
@@ -61,6 +62,7 @@ export default function Engineers({ geometry }: EngineersProps) {
 interface EngineerTokenProps {
   team: Team;
   teams: Team[];
+  timeScale: number;
   geometry: THREE.BufferGeometry;
   graph: Map<number, number[]>;
   setTeamPath: (teamId: string, path: number[]) => void;
@@ -69,7 +71,7 @@ interface EngineerTokenProps {
   onSelect: () => void;
 }
 
-function EngineerToken({ team, teams, geometry, graph, setTeamPath, updateTeamProgress, isSelected, onSelect }: EngineerTokenProps) {
+function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, updateTeamProgress, isSelected, onSelect }: EngineerTokenProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [currentPos, setCurrentPos] = useState<THREE.Vector3 | null>(null);
   const [currentNormal, setCurrentNormal] = useState<THREE.Vector3 | null>(null);
@@ -99,8 +101,10 @@ function EngineerToken({ team, teams, geometry, graph, setTeamPath, updateTeamPr
   }, [team.targetFaceIndex, team.faceIndex, team.path.length, graph, team.id, setTeamPath]);
 
   // Movement animation
-  useFrame((state, delta) => {
+  useFrame((state, realDelta) => {
     if (!meshRef.current || !currentPos || !currentNormal || team.faceIndex === null) return;
+
+    const delta = realDelta * timeScale;
 
     // Calculate Stacking Altitude
     let targetAltitude = 0;
@@ -119,13 +123,13 @@ function EngineerToken({ team, teams, geometry, graph, setTeamPath, updateTeamPr
       targetAltitude = stackIndex * 0.4;
     }
 
-    const newAltitude = THREE.MathUtils.lerp(currentAltitude, targetAltitude, 10 * delta);
+    const newAltitude = THREE.MathUtils.lerp(currentAltitude, targetAltitude, timeScale === 0 ? 0 : 10 * delta);
     setCurrentAltitude(newAltitude);
 
     let displayPos = currentPos.clone();
     let displayNormal = currentNormal.clone();
 
-    if (team.path.length > 0) {
+    if (team.path.length > 0 && timeScale > 0) {
       const nextFace = team.path[0];
       const { center: nextCenter, normal: nextNormal } = getFaceCenterAndNormal(geometry, nextFace);
       
@@ -135,7 +139,7 @@ function EngineerToken({ team, teams, geometry, graph, setTeamPath, updateTeamPr
       const step = speed * delta;
       const dist = currentPos.distanceTo(targetPos);
       
-      if (dist < step) {
+      if (dist <= step) {
         // Snap to next face and pop it from the path
         setCurrentPos(targetPos);
         setCurrentNormal(nextNormal);
@@ -163,7 +167,7 @@ function EngineerToken({ team, teams, geometry, graph, setTeamPath, updateTeamPr
     const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), displayNormal);
     meshRef.current.quaternion.copy(quaternion);
     
-    // Add a gentle floating bobbing effect
+    // Add a gentle floating bobbing effect (independent of timeScale!)
     const bobbing = Math.sin(state.clock.elapsedTime * 4 + parseInt(team.id.replace(/\D/g, ''))) * 0.05;
     meshRef.current.position.add(displayNormal.clone().multiplyScalar(bobbing));
   });

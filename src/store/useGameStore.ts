@@ -22,12 +22,31 @@ interface GameState {
   moveTeam: (teamId: string, targetFaceIndex: number) => void;
   setTeamPath: (teamId: string, path: number[]) => void;
   updateTeamProgress: (teamId: string, newFaceIndex: number, newPath: number[]) => void;
+
+  timeScale: number;
+  setTimeScale: (scale: number) => void;
+  gameTime: number;
+  setGameTime: (time: number) => void;
+  autoRotate: boolean;
+  setAutoRotate: (value: boolean) => void;
 }
+
+// Start at year 2142, Jan 1st
+const START_TIME = new Date("2142-01-01T08:00:00Z").getTime();
 
 export const useGameStore = create<GameState>((set) => ({
   selectedCellId: null,
   selectedCoordinates: null,
   setSelectedCell: (id, coords) => set({ selectedCellId: id, selectedCoordinates: coords || null }),
+
+  timeScale: 1,
+  setTimeScale: (scale) => set({ timeScale: scale }),
+  
+  gameTime: START_TIME,
+  setGameTime: (time) => set({ gameTime: time }),
+
+  autoRotate: true,
+  setAutoRotate: (value) => set({ autoRotate: value }),
 
   teams: [
     { id: 'eng-1', name: 'ENGINEERING ALPHA', status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0 },
