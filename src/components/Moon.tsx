@@ -144,7 +144,10 @@ export default function Moon() {
     fragmentShader: earthShader.fragmentShader,
     uniforms: {
       uSunPosition: { value: new THREE.Vector3(1000, 0, 0) }
-    }
+    },
+    transparent: true,
+    depthWrite: false,
+    wireframe: true,
   }), []);
 
   const geometry = useMemo(() => {
@@ -490,13 +493,13 @@ export default function Moon() {
       {/* Illumination overlay representing the lit side of the moon */}
       <mesh geometry={geometry} material={shadowMaterial} scale={1.002} />
 
-      {/* Distant Sun Marker - Very far away */}
+      {/* The Distant Sun Marker */}
       <group ref={sunRef}>
+        <mesh>
+          <icosahedronGeometry args={[4.5, 3]} />
+          <meshBasicMaterial color="#00ff00" wireframe />
+        </mesh>
         <Billboard>
-          <mesh>
-            <circleGeometry args={[4.5, 32]} />
-            <meshBasicMaterial color="#00ff00" />
-          </mesh>
           <Text position={[0, 12.0, 0]} fontSize={8.75} color="#00ff00" anchorX="center" anchorY="bottom" fillOpacity={0.9}>
             SUN
           </Text>
@@ -505,10 +508,10 @@ export default function Moon() {
 
       {/* Distant Earth Marker - Stationary due to tidal locking */}
       <group position={[-400, 0, 0]}>
+        <mesh material={earthMaterial}>
+          <icosahedronGeometry args={[6.6, 3]} />
+        </mesh>
         <Billboard>
-          <mesh material={earthMaterial}>
-            <circleGeometry args={[6.6, 32]} />
-          </mesh>
           <Text position={[0, 8.0, 0]} fontSize={3.5} color="#00aaff" anchorX="center" anchorY="bottom" fillOpacity={0.9}>
             EARTH
           </Text>

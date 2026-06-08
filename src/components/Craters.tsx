@@ -5,20 +5,7 @@ import { Text, Billboard } from '@react-three/drei';
 import { useGameStore } from '@/store/useGameStore';
 import { LUNAR_CRATERS } from '@/data/craters';
 
-function coordToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
-  const phi = lat * (Math.PI / 180);
-  const theta = lon * (Math.PI / 180);
-
-  return new THREE.Vector3(
-    radius * Math.sin(theta) * Math.cos(phi),
-    radius * Math.sin(phi),
-    radius * Math.cos(theta) * Math.cos(phi)
-  );
-}
-
-const REAL_MOON_RADIUS_KM = 1737.4;
-const SIM_MOON_RADIUS = 5.0;
-const RADIUS_RATIO = SIM_MOON_RADIUS / REAL_MOON_RADIUS_KM;
+import { coordToVector3, SIM_MOON_RADIUS, RADIUS_RATIO } from '@/utils/geo';
 
 // For wireframe circles
 const circleGeometry = new THREE.EdgesGeometry(new THREE.CircleGeometry(1, 32));

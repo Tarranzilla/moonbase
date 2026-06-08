@@ -6,21 +6,7 @@ import { Text, Billboard } from '@react-three/drei';
 import { useGameStore } from '@/store/useGameStore';
 import { LUNAR_MARES, Mare } from '@/data/mares';
 
-function coordToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
-  const phi = lat * (Math.PI / 180);
-  const theta = lon * (Math.PI / 180);
-
-  return new THREE.Vector3(
-    radius * Math.sin(theta) * Math.cos(phi),
-    radius * Math.sin(phi),
-    radius * Math.cos(theta) * Math.cos(phi)
-  );
-}
-
-// 1 unit in Three.js = 1000 km in real life (Moon radius is 1737km, simulated as 5.0 units)
-const SIM_MOON_RADIUS = 5.0;
-const REAL_MOON_RADIUS_KM = 1737.4;
-const RADIUS_RATIO = SIM_MOON_RADIUS / REAL_MOON_RADIUS_KM;
+import { coordToVector3, SIM_MOON_RADIUS, RADIUS_RATIO } from '@/utils/geo';
 
 const mareMaterial = new THREE.MeshBasicMaterial({ 
   color: '#00aaff', 

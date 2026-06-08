@@ -36,6 +36,14 @@ interface GameState {
     showMares: boolean;
   };
   toggleFilter: (filterName: keyof GameState['filters']) => void;
+
+  cameraTarget: { 
+    type: 'ENTITY' | 'CELESTIAL';
+    id: string; // 'sun', 'earth', 'moon', or entity ID
+    pos?: { x: number; y: number; z: number }; 
+    name: string;
+  } | null;
+  focusTarget: (target: GameState['cameraTarget']) => void;
 }
 
 // Start at year 2142, Jan 1st
@@ -66,6 +74,14 @@ export const useGameStore = create<GameState>((set) => ({
       [filterName]: !state.filters[filterName]
     }
   })),
+
+  cameraTarget: null,
+  focusTarget: (target) => {
+    set({ 
+      cameraTarget: target,
+      autoRotate: target ? false : useGameStore.getState().autoRotate
+    });
+  },
 
   teams: [
     { id: 'eng-1', name: 'ENGINEERING ALPHA', status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0 },
