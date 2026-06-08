@@ -21,44 +21,114 @@ function formatCoords(lat: number, lon: number) {
 }
 
 export default function TerminalUI() {
-  const selectedCellId = useGameStore((state) => state.selectedCellId);
-  const selectedCoordinates = useGameStore((state) => state.selectedCoordinates);
+  const { 
+    selectedCellId, 
+    selectedCoordinates, 
+    teams, 
+    selectedTeamId, 
+    setSelectedTeam, 
+    deployTeam, 
+    moveTeam 
+  } = useGameStore();
+
+  const selectedTeam = teams.find(t => t.id === selectedTeamId);
+
+  const handleDeploy = () => {
+    if (selectedTeamId && selectedCellId) {
+      deployTeam(selectedTeamId, parseInt(selectedCellId, 10));
+    }
+  };
+
+  const handleMove = () => {
+    if (selectedTeamId && selectedCellId) {
+      moveTeam(selectedTeamId, parseInt(selectedCellId, 10));
+    }
+  };
 
   return (
     <div className="absolute inset-0 pointer-events-none p-4 md:p-8 flex flex-col justify-between font-mono text-green-500 z-10">
-      {/* Header */}
-      <header className="border-b-2 border-green-500/50 pb-2 mb-4 drop-shadow-[0_0_8px_rgba(34,197,94,0.8)]">
-        <h1 className="text-xl md:text-3xl font-bold tracking-widest uppercase">
-          Moonbase Command Terminal
+      {/* Top Header */}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold tracking-[0.2em] shadow-green-500/50 drop-shadow-md">
+          MOONBASE COMMAND TERMINAL
         </h1>
-        <p className="text-sm md:text-base opacity-80 uppercase tracking-widest">
-          Offline Sandbox // v0.1.0
-        </p>
-      </header>
+        <p className="text-sm opacity-80">OFFLINE SANDBOX // V0.1.0</p>
+        <div className="h-px w-full max-w-4xl bg-green-500/50 mt-2" />
+      </div>
 
-      {/* Info Panel */}
-      <div className="pointer-events-auto border-2 border-green-500/50 bg-black/40 backdrop-blur-sm p-4 w-full max-w-md self-end drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]">
-        <h2 className="text-lg font-bold border-b border-green-500/30 pb-1 mb-2 uppercase">
-          Sector Status
-        </h2>
-        {selectedCellId ? (
-          <div className="space-y-1">
-            <p>TARGET SECTOR: <span className="font-bold text-green-400">[{selectedCellId}]</span>
-              {selectedCoordinates && (
-                <span className="ml-3 text-green-600/80 text-xs">
-                  {formatCoords(selectedCoordinates.lat, selectedCoordinates.lon)}
-                </span>
+      {/* Middle/Bottom Layout */}
+      <div className="flex justify-between items-end w-full">
+        
+        {/* Left Panel: Engineer Roster */}
+        <div className="pointer-events-auto border border-green-500/50 bg-black/60 p-4 backdrop-blur-sm shadow-[0_0_15px_rgba(0,255,0,0.1)] w-72">
+          <h2 className="mb-2 text-sm font-bold border-b border-green-500/30 pb-1">ENGINEER ROSTER</h2>
+          <div className="flex flex-col gap-2">
+            {teams.map(team => (
+              <button
+                key={team.id}
+                onClick={() => setSelectedTeam(team.id)}
+                className={`text-left p-2 border text-xs transition-colors ${
+                  selectedTeamId === team.id 
+                    ? 'border-green-400 bg-green-900/30 text-green-300' 
+                    : 'border-green-500/20 hover:border-green-500/50 opacity-70'
+                }`}
+              >
+                <div className="font-bold">{team.name}</div>
+                <div className="flex justify-between mt-1">
+                  <span>STS: {team.status}</span>
+                  {team.status === 'DEPLOYED' && <span>LOC: [{team.faceIndex}]</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Action Context Menu for Selected Team */}
+          {selectedTeam && (
+            <div className="mt-4 pt-4 border-t border-green-500/30">
+              <p className="text-xs mb-2 opacity-80">ACTION COMMAND:</p>
+              {selectedTeam.status === 'AVAILABLE' ? (
+                <button 
+                  onClick={handleDeploy}
+                  disabled={!selectedCellId}
+                  className="w-full py-2 border border-green-500 bg-green-900/20 hover:bg-green-900/50 disabled:opacity-30 disabled:hover:bg-transparent transition-colors text-xs font-bold"
+                >
+                  DEPLOY TO SECTOR {selectedCellId ? `[${selectedCellId}]` : '...'}
+                </button>
+              ) : (
+                <button 
+                  onClick={handleMove}
+                  disabled={!selectedCellId || selectedCellId === selectedTeam.faceIndex?.toString()}
+                  className="w-full py-2 border border-green-500 bg-green-900/20 hover:bg-green-900/50 disabled:opacity-30 disabled:hover:bg-transparent transition-colors text-xs font-bold"
+                >
+                  MOVE TO SECTOR {selectedCellId ? `[${selectedCellId}]` : '...'}
+                </button>
               )}
-            </p>
-            <p>STATUS: <span className="animate-pulse text-green-300">UNEXPLORED</span></p>
-            <p className="text-xs opacity-70 mt-2">Awaiting engineering deployment...</p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <p className="animate-pulse">AWAITING SECTOR SELECTION...</p>
-            <p className="text-xs opacity-70 mt-2">Click on the lunar grid to select a target.</p>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Panel: Sector Status */}
+        <div className="pointer-events-auto border border-green-500/50 bg-black/60 p-4 backdrop-blur-sm shadow-[0_0_15px_rgba(0,255,0,0.1)] w-80">
+          <h2 className="mb-2 text-sm font-bold border-b border-green-500/30 pb-1">
+            SECTOR STATUS
+          </h2>
+          {selectedCellId ? (
+            <div className="space-y-1">
+              <p>TARGET SECTOR: <span className="font-bold text-green-400">[{selectedCellId}]</span>
+                {selectedCoordinates && (
+                  <span className="ml-3 text-green-600/80 text-xs">
+                    {formatCoords(selectedCoordinates.lat, selectedCoordinates.lon)}
+                  </span>
+                )}
+              </p>
+              <p>STATUS: <span className="animate-pulse text-green-300">UNEXPLORED</span></p>
+              <p className="text-xs opacity-70 mt-2">Awaiting engineering deployment...</p>
+            </div>
+          ) : (
+            <p className="text-xs opacity-70">AWAITING SECTOR SELECTION...</p>
+          )}
+        </div>
+
       </div>
 
       {/* Scanline overlay (CSS based in addition to PostProcessing, or just extra styling) */}

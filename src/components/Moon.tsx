@@ -1,10 +1,11 @@
 'use client';
 
-import { useRef, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '@/store/useGameStore';
+import Engineers from './Engineers';
 
 export default function Moon() {
   const setSelectedCell = useGameStore((state) => state.setSelectedCell);
@@ -324,6 +325,8 @@ export default function Moon() {
       <mesh geometry={geometry}>
         <meshBasicMaterial color="#000000" />
       </mesh>
+
+      <Engineers geometry={geometry} />
     </group>
   );
 }
