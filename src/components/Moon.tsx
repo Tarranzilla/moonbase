@@ -6,6 +6,8 @@ import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '@/store/useGameStore';
 import Engineers from './Engineers';
+import Craters from './Craters';
+import Mares from './Mares';
 
 const sunShader = {
   vertexShader: `
@@ -116,6 +118,7 @@ const earthShader = {
 export default function Moon() {
   const setSelectedCell = useGameStore((state) => state.setSelectedCell);
   const selectedCellId = useGameStore((state) => state.selectedCellId);
+  const showEquator = useGameStore((state) => state.filters.showEquator);
 
   const [hoveredFace, setHoveredFace] = useState<number | null>(null);
   const sunRef = useRef<THREE.Group>(null);
@@ -422,34 +425,38 @@ export default function Moon() {
         />
       </mesh>
 
-      {/* Equator Ring */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[5.2, 0.015, 8, 64]} />
-        <meshBasicMaterial color="#00ff00" transparent opacity={0.2} depthWrite={false} />
-      </mesh>
+      {showEquator && (
+        <group>
+          {/* Equator Ring */}
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[5.2, 0.015, 8, 64]} />
+            <meshBasicMaterial color="#00ff00" transparent opacity={0.2} depthWrite={false} />
+          </mesh>
 
-      {/* Equator Longitude Markers */}
-      {longitudeMarkers.map((marker, i) => (
-        <Billboard key={`lon-${i}`} position={marker.position}>
-          <Text fontSize={0.2} color="#00ff00" anchorX="center" anchorY="middle" fillOpacity={0.6} depthOffset={-2} renderOrder={1}>
-            {marker.label}
-          </Text>
-        </Billboard>
-      ))}
+          {/* Longitude Markers */}
+          {longitudeMarkers.map((marker, i) => (
+            <Billboard key={`lon-${i}`} position={marker.position}>
+              <Text position={[0, -0.2, 0]} fontSize={0.15} color="#00ff00" anchorX="center" anchorY="top" fillOpacity={0.8} depthOffset={-10}>
+                {marker.label}
+              </Text>
+            </Billboard>
+          ))}
 
-      {/* North Pole Marker */}
-      <Billboard position={[0, 5.4, 0]}>
-        <Text fontSize={0.5} color="#00ff00" anchorX="center" anchorY="middle">
-          N
-        </Text>
-      </Billboard>
+          {/* North Pole Marker */}
+          <Billboard position={[0, 5.4, 0]}>
+            <Text fontSize={0.5} color="#00ff00" anchorX="center" anchorY="middle">
+              N
+            </Text>
+          </Billboard>
 
-      {/* South Pole Marker */}
-      <Billboard position={[0, -5.4, 0]}>
-        <Text fontSize={0.5} color="#00ff00" anchorX="center" anchorY="middle">
-          S
-        </Text>
-      </Billboard>
+          {/* South Pole Marker */}
+          <Billboard position={[0, -5.4, 0]}>
+            <Text fontSize={0.5} color="#00ff00" anchorX="center" anchorY="middle">
+              S
+            </Text>
+          </Billboard>
+        </group>
+      )}
 
       {/* Hovered Face Highlight */}
       {highlightGeometry && (
@@ -508,6 +515,8 @@ export default function Moon() {
         </Billboard>
       </group>
 
+      <Craters />
+      <Mares />
       <Engineers geometry={geometry} />
     </group>
   );

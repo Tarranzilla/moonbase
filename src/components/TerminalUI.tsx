@@ -3,6 +3,7 @@
 import { useGameStore } from '@/store/useGameStore';
 import Clock from './Clock';
 import CameraControls from './CameraControls';
+import VisualFilters from './VisualFilters';
 
 function formatCoords(lat: number, lon: number) {
   const latDir = lat >= 0 ? 'N' : 'S';
@@ -58,10 +59,11 @@ export default function TerminalUI() {
         <div className="h-px w-full max-w-4xl bg-green-500/50 mt-2" />
       </div>
 
-      {/* Top Right: Clock and Camera Controls */}
+      {/* Top Right: Clock, Camera Controls, and Filters */}
       <div className="absolute top-6 right-6 flex flex-col gap-2">
         <Clock />
         <CameraControls />
+        <VisualFilters />
       </div>
 
       {/* Middle/Bottom Layout */}

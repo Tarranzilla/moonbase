@@ -29,6 +29,13 @@ interface GameState {
   setGameTime: (time: number) => void;
   autoRotate: boolean;
   setAutoRotate: (value: boolean) => void;
+
+  filters: {
+    showCraters: boolean;
+    showEquator: boolean;
+    showMares: boolean;
+  };
+  toggleFilter: (filterName: keyof GameState['filters']) => void;
 }
 
 // Start at year 2142, Jan 1st
@@ -47,6 +54,18 @@ export const useGameStore = create<GameState>((set) => ({
 
   autoRotate: true,
   setAutoRotate: (value) => set({ autoRotate: value }),
+
+  filters: {
+    showCraters: true,
+    showEquator: true,
+    showMares: true,
+  },
+  toggleFilter: (filterName) => set((state) => ({
+    filters: {
+      ...state.filters,
+      [filterName]: !state.filters[filterName]
+    }
+  })),
 
   teams: [
     { id: 'eng-1', name: 'ENGINEERING ALPHA', status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0 },
