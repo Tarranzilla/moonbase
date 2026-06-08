@@ -5,11 +5,15 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, Scanline } from '@react-three/postprocessing';
 import Moon from './Moon';
+import { useGameStore } from '@/store/useGameStore';
 
 export default function Scene() {
   return (
     <div className="absolute inset-0 z-0">
-      <Canvas camera={{ position: [0, 0, 15], fov: 45 }}>
+      <Canvas 
+        camera={{ position: [0, 0, 15], fov: 45 }}
+        onPointerMissed={() => useGameStore.getState().setSelectedCell(null)}
+      >
         <color attach="background" args={['#050505']} />
         <ambientLight intensity={0.5} />
         <Suspense fallback={null}>

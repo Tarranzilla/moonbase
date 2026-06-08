@@ -276,7 +276,7 @@ export default function Moon() {
       {/* Equator Longitude Markers */}
       {longitudeMarkers.map((marker, i) => (
         <Billboard key={`lon-${i}`} position={marker.position}>
-          <Text fontSize={0.2} color="#00ff00" anchorX="center" anchorY="middle" opacity={0.6} transparent depthOffset={-2} renderOrder={1}>
+          <Text fontSize={0.2} color="#00ff00" anchorX="center" anchorY="middle" fillOpacity={0.6} depthOffset={-2} renderOrder={1}>
             {marker.label}
           </Text>
         </Billboard>
@@ -313,7 +313,7 @@ export default function Moon() {
           
           {/* Hovering Sector ID */}
           <Billboard position={selectedData.center.clone().add(selectedData.normal.clone().multiplyScalar(1.5))}>
-            <Text fontSize={0.25} color="#00ff00" anchorX="center" anchorY="middle" opacity={0.9} transparent depthOffset={-2}>
+            <Text fontSize={0.25} color="#00ff00" anchorX="center" anchorY="middle" fillOpacity={0.9} depthOffset={-2}>
               [{selectedCellId}]
             </Text>
           </Billboard>
