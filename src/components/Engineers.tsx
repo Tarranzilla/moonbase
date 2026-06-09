@@ -73,6 +73,7 @@ interface EngineerTokenProps {
 
 function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, updateTeamProgress, isSelected, onSelect }: EngineerTokenProps) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const lineRef = useRef<THREE.Line>(null);
   const [currentPos, setCurrentPos] = useState<THREE.Vector3 | null>(null);
   const [currentNormal, setCurrentNormal] = useState<THREE.Vector3 | null>(null);
   const [currentAltitude, setCurrentAltitude] = useState(0);
@@ -172,24 +173,44 @@ function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, u
     // Add a gentle floating bobbing effect (independent of timeScale!)
     const bobbing = Math.sin(state.clock.elapsedTime * 4 + parseInt(team.id.replace(/\D/g, ''))) * 0.05;
     meshRef.current.position.add(displayNormal.clone().multiplyScalar(bobbing));
+
+    if (team.status === 'BUILDING' && team.buildJob?.targetFaceIndex !== undefined && lineRef.current) {
+      const { center: targetCenter } = getFaceCenterAndNormal(geometry, team.buildJob.targetFaceIndex);
+      const positions = new Float32Array([
+        meshRef.current.position.x, meshRef.current.position.y, meshRef.current.position.z,
+        targetCenter.x, targetCenter.y, targetCenter.z
+      ]);
+      lineRef.current.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      lineRef.current.visible = true;
+      (lineRef.current.material as THREE.LineBasicMaterial).opacity = 0.5 + Math.sin(state.clock.elapsedTime * 20) * 0.5;
+    } else if (lineRef.current) {
+      lineRef.current.visible = false;
+    }
   });
 
   if (!currentPos) return null;
 
   return (
-    <mesh 
-      ref={meshRef} 
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
-    >
-      <octahedronGeometry args={[0.2, 0]} />
-      <meshBasicMaterial 
-        color={isSelected ? "#ffffff" : "#00ff00"} 
-        wireframe={true}
-        wireframeLinewidth={isSelected ? 2 : 1}
-      />
-    </mesh>
+    <group>
+      <mesh 
+        ref={meshRef} 
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+      >
+        <octahedronGeometry args={[0.2, 0]} />
+        <meshBasicMaterial 
+          color={isSelected ? "#ffffff" : "#00ff00"} 
+          wireframe={true}
+          wireframeLinewidth={isSelected ? 2 : 1}
+        />
+      </mesh>
+      {/* @ts-ignore */}
+      <line ref={lineRef} visible={false}>
+        <bufferGeometry />
+        <lineBasicMaterial color="#00ff00" transparent opacity={0.8} />
+      </line>
+    </group>
   );
 }

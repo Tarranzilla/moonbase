@@ -1,19 +1,29 @@
 import { create } from 'zustand';
 
+export type BuildingType = 'CORE' | 'SOLAR_PANEL' | 'BATTERY' | 'JUNCTION' | 'ICE_EXTRACTOR' | 'MINERAL_EXTRACTOR' | 'WAREHOUSE';
+
 export interface Building {
   id: string;
-  type: 'SOLAR_PANEL' | 'BATTERY' | 'NODE';
+  type: BuildingType;
   faceIndex: number;
   status: 'UNDER_CONSTRUCTION' | 'OPERATIONAL';
   completionTime: number | null; // null if operational or not yet started
   energyStored: number;
   energyMax: number;
+  waterStored: number;
+  waterMax: number;
+  mineralsStored: number;
+  mineralsMax: number;
+  isPowered?: boolean;
 }
+
+export type FlowType = 'BOTH' | 'A_TO_B' | 'B_TO_A' | 'NONE';
 
 export interface Connection {
   id: string;
   fromFaceIndex: number;
   toFaceIndex: number;
+  flowType?: FlowType; // Default is assumed to be BOTH if undefined
 }
 
 export interface Team {
@@ -27,13 +37,13 @@ export interface Team {
   
   // What this team is assigned to build when they arrive
   buildJob?: {
-    type: 'SOLAR_PANEL' | 'BATTERY' | 'NODE' | 'CONNECTION' | 'DECONSTRUCT';
+    type: BuildingType | 'CONNECTION' | 'DECONSTRUCT' | 'DECONSTRUCT_CONNECTION';
     targetFaceIndex: number;
     secondaryFaceIndex?: number; // For connections
   } | null;
 }
 
-export type BuildMode = 'NONE' | 'SOLAR_PANEL' | 'BATTERY' | 'NODE' | 'CONNECTION' | 'DECONSTRUCT';
+export type BuildMode = 'NONE' | BuildingType | 'CONNECTION' | 'DECONSTRUCT';
 
 interface GameState {
   selectedCellId: string | null;
@@ -61,6 +71,7 @@ interface GameState {
   updateBuilding: (id: string, updates: Partial<Building>) => void;
   removeBuilding: (id: string) => void;
   addConnection: (connection: Connection) => void;
+  updateConnection: (id: string, updates: Partial<Connection>) => void;
   removeConnection: (id: string) => void;
 
   timeScale: number;
@@ -166,6 +177,9 @@ export const useGameStore = create<GameState>((set) => ({
     connections: state.connections.filter(c => c.id !== id && c.fromFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex && c.toFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex) // remove related connections too! wait, better to just filter out connections touching the faceIndex
   })),
   addConnection: (connection) => set((state) => ({ connections: [...state.connections, connection] })),
+  updateConnection: (id, updates) => set((state) => ({
+    connections: state.connections.map(c => c.id === id ? { ...c, ...updates } : c)
+  })),
   removeConnection: (id) => set((state) => ({ connections: state.connections.filter(c => c.id !== id) })),
 
   teams: [

@@ -3,6 +3,7 @@
 import { useGameStore } from '@/store/useGameStore';
 import * as THREE from 'three';
 import { getFaceCenter } from '@/utils/geo';
+import { getSectorResources } from '@/utils/geology';
 import Clock from './Clock';
 import CameraControls from './CameraControls';
 import VisualFilters from './VisualFilters';
@@ -38,7 +39,9 @@ export default function TerminalUI() {
     moveTeam,
     buildMode,
     setBuildMode,
-    buildings
+    buildings,
+    connections,
+    updateConnection
   } = useGameStore();
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -58,6 +61,11 @@ export default function TerminalUI() {
     }
   };
 
+  const totalWater = buildings.reduce((sum, b) => sum + (b.waterStored || 0), 0);
+  const maxWater = buildings.reduce((sum, b) => sum + (b.waterMax || 0), 0);
+  const totalMinerals = buildings.reduce((sum, b) => sum + (b.mineralsStored || 0), 0);
+  const maxMinerals = buildings.reduce((sum, b) => sum + (b.mineralsMax || 0), 0);
+
   return (
     <div className="absolute inset-0 pointer-events-none p-2 md:p-8 flex flex-col justify-between font-mono text-green-500 z-10 overflow-hidden">
       
@@ -73,7 +81,13 @@ export default function TerminalUI() {
               <h1 className="text-xl md:text-3xl font-bold tracking-[0.1em] md:tracking-[0.2em] shadow-green-500/50 drop-shadow-md leading-tight md:whitespace-nowrap">
                 MOONBASE COMMAND TERMINAL
               </h1>
-              <p className="text-[10px] md:text-sm opacity-80">OFFLINE SANDBOX // V0.1.0</p>
+              <div className="flex gap-3 md:gap-6 items-center">
+                <p className="text-[10px] md:text-sm opacity-80">OFFLINE SANDBOX // V0.1.0</p>
+                <div className="flex gap-2 bg-black/60 px-2 py-0.5 border border-green-500/30">
+                  <p className="text-[9px] md:text-xs text-cyan-400">H2O: {Math.floor(totalWater)}/{maxWater}</p>
+                  <p className="text-[9px] md:text-xs text-orange-400">MIN: {Math.floor(totalMinerals)}/{maxMinerals}</p>
+                </div>
+              </div>
             </div>
             
             {/* Mobile Settings Button */}
@@ -201,8 +215,20 @@ export default function TerminalUI() {
                   
                   <div className="h-px w-full bg-green-500/20 my-1" />
                   
-                  <p className="text-[9px] md:text-[10px] opacity-70">CONSTRUCTION MANAGER:</p>
+                  <p className="text-[9px] md:text-[10px] opacity-70 mt-2 text-blue-400">POWER & LOGISTICS:</p>
                   <div className="grid grid-cols-2 gap-1 md:gap-2">
+                    <button 
+                      onClick={() => setBuildMode('CORE')}
+                      className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'CORE' ? 'bg-blue-500 text-black border-blue-500' : 'border-blue-500/50 hover:bg-blue-900/40 text-blue-400'}`}
+                    >
+                      CORE
+                    </button>
+                    <button 
+                      onClick={() => setBuildMode('WAREHOUSE')}
+                      className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'WAREHOUSE' ? 'bg-blue-500 text-black border-blue-500' : 'border-blue-500/50 hover:bg-blue-900/40 text-blue-400'}`}
+                    >
+                      WAREHOUSE
+                    </button>
                     <button 
                       onClick={() => setBuildMode('SOLAR_PANEL')}
                       className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'SOLAR_PANEL' ? 'bg-green-500 text-black border-green-500' : 'border-green-500/50 hover:bg-green-900/40'}`}
@@ -216,16 +242,32 @@ export default function TerminalUI() {
                       BATTERY
                     </button>
                     <button 
-                      onClick={() => setBuildMode('NODE')}
-                      className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'NODE' ? 'bg-green-500 text-black border-green-500' : 'border-green-500/50 hover:bg-green-900/40'}`}
+                      onClick={() => setBuildMode('JUNCTION')}
+                      className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'JUNCTION' ? 'bg-green-500 text-black border-green-500' : 'border-green-500/50 hover:bg-green-900/40'}`}
                     >
-                      PWR NODE
+                      JUNCTION
                     </button>
                     <button 
                       onClick={() => setBuildMode('CONNECTION')}
                       className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'CONNECTION' ? 'bg-green-500 text-black border-green-500' : 'border-green-500/50 hover:bg-green-900/40'}`}
                     >
                       LINK
+                    </button>
+                  </div>
+
+                  <p className="text-[9px] md:text-[10px] opacity-70 mt-1 text-cyan-400">RESOURCE EXTRACTION:</p>
+                  <div className="grid grid-cols-2 gap-1 md:gap-2">
+                    <button 
+                      onClick={() => setBuildMode('ICE_EXTRACTOR')}
+                      className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'ICE_EXTRACTOR' ? 'bg-cyan-500 text-black border-cyan-500' : 'border-cyan-500/50 hover:bg-cyan-900/40 text-cyan-400'}`}
+                    >
+                      ICE DRILL
+                    </button>
+                    <button 
+                      onClick={() => setBuildMode('MINERAL_EXTRACTOR')}
+                      className={`py-1 border text-[9px] md:text-[10px] transition-colors ${buildMode === 'MINERAL_EXTRACTOR' ? 'bg-cyan-500 text-black border-cyan-500' : 'border-cyan-500/50 hover:bg-cyan-900/40 text-cyan-400'}`}
+                    >
+                      MINERAL EXCAV
                     </button>
                   </div>
                   <button 
@@ -259,9 +301,22 @@ export default function TerminalUI() {
             <div className="space-y-1">
               <p className="text-[10px] md:text-xs">TARGET SECTOR: <span className="font-bold text-green-400">[{selectedCellId}]</span></p>
               {selectedCoordinates && (
-                <p className="text-green-600/80 text-[9px] md:text-xs pb-1">
-                  {formatCoords(selectedCoordinates.lat, selectedCoordinates.lon)}
-                </p>
+                <>
+                  <p className="text-green-600/80 text-[9px] md:text-xs pb-1 border-b border-green-500/20">
+                    {formatCoords(selectedCoordinates.lat, selectedCoordinates.lon)}
+                  </p>
+                  
+                  {(() => {
+                    const res = getSectorResources(selectedCoordinates.lat, selectedCoordinates.lon);
+                    return (
+                      <div className="py-1 text-[9px] md:text-[10px] space-y-0.5">
+                        <p className="text-blue-400 font-bold">GEOLOGICAL SCAN:</p>
+                        <p>H2O TRACES: <span className={res.water === 'HIGH' ? 'text-cyan-400 font-bold' : res.water === 'MEDIUM' ? 'text-cyan-600' : 'text-gray-500'}>{res.water}</span></p>
+                        <p>MINERALS: <span className={res.minerals === 'HIGH' ? 'text-orange-400 font-bold' : res.minerals === 'MEDIUM' ? 'text-orange-600' : 'text-gray-500'}>{res.minerals}</span></p>
+                      </div>
+                    );
+                  })()}
+                </>
               )}
               {(() => {
                 const building = buildings.find(b => b.faceIndex === parseInt(selectedCellId, 10));
@@ -287,9 +342,61 @@ export default function TerminalUI() {
                       {building.type === 'SOLAR_PANEL' && building.status === 'OPERATIONAL' && (
                         <p>LIGHT: <span className={isIlluminated ? "text-yellow-400 font-bold" : "text-blue-900"}>{isIlluminated ? "DIRECT SUNLIGHT" : "IN SHADOW"}</span></p>
                       )}
-                      {building.type === 'BATTERY' && building.status === 'OPERATIONAL' && (
+                      {building.type === 'JUNCTION' && building.status === 'OPERATIONAL' && (
+                        <div className="mt-2 border-t border-green-500/20 pt-1">
+                          <p className="font-bold text-blue-400 mb-1">FLOW CONTROL</p>
+                          {connections.filter(c => c.fromFaceIndex === building.faceIndex || c.toFaceIndex === building.faceIndex).map(c => {
+                            const isFrom = c.fromFaceIndex === building.faceIndex;
+                            const otherId = isFrom ? c.toFaceIndex : c.fromFaceIndex;
+                            const otherBuilding = buildings.find(b => b.faceIndex === otherId);
+                            const flow = c.flowType || 'BOTH';
+                            
+                            // Determine display text based on flow relative to this junction
+                            let displayFlow = 'BOTH (IN/OUT)';
+                            if (flow === 'NONE') displayFlow = 'BLOCKED';
+                            else if (flow === 'A_TO_B') displayFlow = isFrom ? 'OUT ONLY' : 'IN ONLY';
+                            else if (flow === 'B_TO_A') displayFlow = isFrom ? 'IN ONLY' : 'OUT ONLY';
+
+                            const toggleFlow = () => {
+                              // BOTH -> OUT -> IN -> BLOCKED -> BOTH
+                              // OUT from Junction = if (isFrom) A_TO_B else B_TO_A
+                              // IN to Junction = if (isFrom) B_TO_A else A_TO_B
+                              let nextFlow: 'BOTH' | 'A_TO_B' | 'B_TO_A' | 'NONE' = 'BOTH';
+                              if (flow === 'BOTH') nextFlow = isFrom ? 'A_TO_B' : 'B_TO_A'; // OUT
+                              else if ((flow === 'A_TO_B' && isFrom) || (flow === 'B_TO_A' && !isFrom)) nextFlow = isFrom ? 'B_TO_A' : 'A_TO_B'; // IN
+                              else if ((flow === 'B_TO_A' && isFrom) || (flow === 'A_TO_B' && !isFrom)) nextFlow = 'NONE'; // BLOCKED
+                              else if (flow === 'NONE') nextFlow = 'BOTH';
+
+                              updateConnection(c.id, { flowType: nextFlow });
+                            };
+
+                            return (
+                              <div key={c.id} className="flex justify-between items-center mb-1">
+                                <span className="truncate pr-2">Link to {otherBuilding?.type || 'Unknown'}</span>
+                                <button onClick={toggleFlow} className="px-1 border border-green-500/50 hover:bg-green-900/40 min-w-[70px] text-center text-[8px]">
+                                  {displayFlow}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {(building.type === 'BATTERY' || building.type === 'CORE') && building.status === 'OPERATIONAL' && (
                         <p>ENERGY: {Math.floor(building.energyStored)} / {building.energyMax}</p>
                       )}
+                      {(building.type === 'WAREHOUSE' || building.type === 'CORE') && building.status === 'OPERATIONAL' && (
+                        <>
+                          <p>WATER: {Math.floor(building.waterStored)} / {building.waterMax}</p>
+                          <p>MINERALS: {Math.floor(building.mineralsStored)} / {building.mineralsMax}</p>
+                        </>
+                      )}
+                      {(building.type === 'ICE_EXTRACTOR' || building.type === 'MINERAL_EXTRACTOR') && building.status === 'OPERATIONAL' && (
+                        <>
+                          <p>POWER: <span className={building.isPowered ? 'text-green-400 font-bold' : 'text-red-500 font-bold animate-pulse'}>{building.isPowered ? '[POWERED]' : '[NO POWER]'}</span></p>
+                          <p>CONSUMPTION: -50 E/h</p>
+                        </>
+                      )}
+
                     </div>
                   );
                 }

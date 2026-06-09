@@ -16,6 +16,16 @@ export function coordToVector3(lat: number, lon: number, radius: number): THREE.
   );
 }
 
+export function vector3ToCoord(vec: THREE.Vector3): { lat: number; lon: number } {
+  const radius = vec.length();
+  const phi = Math.asin(vec.y / radius);
+  const theta = Math.atan2(vec.x, vec.z);
+  return {
+    lat: phi * (180 / Math.PI),
+    lon: theta * (180 / Math.PI)
+  };
+}
+
 // Cached geometry for looking up cell coordinates without needing the React component
 let cachedIcosahedron: THREE.IcosahedronGeometry | null = null;
 
