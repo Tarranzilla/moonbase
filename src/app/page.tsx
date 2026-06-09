@@ -12,7 +12,6 @@ export default function Home() {
     <ErrorBoundary>
       <main className="w-screen h-screen bg-black overflow-hidden relative">
         <Scene />
-        <SearchUI />
         <TerminalUI />
       </main>
     </ErrorBoundary>

@@ -12,7 +12,7 @@ const circleGeometry = new THREE.EdgesGeometry(new THREE.CircleGeometry(1, 32));
 const craterMaterial = new THREE.LineBasicMaterial({ color: '#00ff00', transparent: true, opacity: 0.5 });
 
 // Shared HUD pin geometries
-const HUD_PIN_Y = 0.3; // Shift it diagonally away from the center
+const HUD_PIN_Y = 0.0; // Straight up from the center (perpendicular)
 const HUD_PIN_Z = -1.0; // Push out far from the surface to avoid equator ring
 
 const pointerLineGeometry = new THREE.BufferGeometry().setFromPoints([

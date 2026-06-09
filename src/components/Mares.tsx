@@ -18,7 +18,7 @@ const mareMaterial = new THREE.MeshBasicMaterial({
 const mareOutlineMaterial = new THREE.LineBasicMaterial({ color: '#00aaff', transparent: true, opacity: 0.15 });
 
 // Shared HUD pin geometries (Taller and further than Craters to separate layers)
-const HUD_PIN_Y = 0.6; // Shift it diagonally away from the center
+const HUD_PIN_Y = 0.0; // Straight up from the center (perpendicular)
 const HUD_PIN_Z = -1.8; // Push out far from the surface
 
 const pointerLineGeometry = new THREE.BufferGeometry().setFromPoints([

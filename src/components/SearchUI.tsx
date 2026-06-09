@@ -154,7 +154,7 @@ export default function SearchUI() {
   };
 
   return (
-    <div className="absolute top-32 left-8 z-10 w-80 pointer-events-none">
+    <div className="relative z-10 w-full pointer-events-none">
       {/* Search Input */}
       <div className="pointer-events-auto border border-green-500/50 bg-black/60 p-2 backdrop-blur-sm shadow-[0_0_15px_rgba(0,255,0,0.1)]">
         <div className="flex items-center gap-2">
