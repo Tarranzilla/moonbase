@@ -78,6 +78,17 @@ export default function Buildings() {
   const warehouses = buildings.filter(b => b.type === 'WAREHOUSE');
   const cores = buildings.filter(b => b.type === 'CORE');
 
+  // Identify empty relay faces (faces with connections but no buildings)
+  const connectedFaces = new Set<number>();
+  connections.forEach(c => {
+    connectedFaces.add(c.fromFaceIndex);
+    connectedFaces.add(c.toFaceIndex);
+  });
+  buildings.forEach(b => {
+    connectedFaces.delete(b.faceIndex);
+  });
+  const relayFaces = Array.from(connectedFaces);
+
   return (
     <group>
       {solarPanels.map(b => <SolarPanel key={b.id} building={b} gameTime={gameTime} />)}
@@ -86,9 +97,35 @@ export default function Buildings() {
       {iceExtractors.map(b => <IceExtractor key={b.id} building={b} gameTime={gameTime} />)}
       {mineralExtractors.map(b => <MineralExtractor key={b.id} building={b} gameTime={gameTime} />)}
       {warehouses.map(b => <Warehouse key={b.id} building={b} gameTime={gameTime} />)}
-      {cores.map(b => <Core key={b.id} building={b} gameTime={gameTime} />)}
-      {connections.map(c => <PowerLine key={c.id} connection={c} />)}
+      {/* Core Structures */}
+      {cores.map(c => <Core key={c.id} building={c} gameTime={gameTime} />)}
+
+      {/* Relays */}
+      {relayFaces.map(faceIndex => <PowerRelay key={`relay-${faceIndex}`} faceIndex={faceIndex} />)}
+
+      {/* Power Lines */}
+      {connections.map((c, idx) => (
+        <PowerLine key={idx} connection={c} />
+      ))}
     </group>
+  );
+}
+
+function PowerRelay({ faceIndex }: { faceIndex: number }) {
+  const center = getFaceCenter(faceIndex);
+  if (!center) return null;
+
+  // Align to surface normal
+  const normal = center.clone().normalize();
+  const up = new THREE.Vector3(0, 1, 0);
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
+
+  return (
+    <mesh position={center} quaternion={quaternion}>
+      {/* Mini 4-sided elongated pyramid */}
+      <cylinderGeometry args={[0.02, 0.08, 0.25, 4, 1]} />
+      <meshBasicMaterial color="#ffffff" wireframe={true} />
+    </mesh>
   );
 }
 
@@ -380,7 +417,7 @@ function PowerLine({ connection }: { connection: Connection }) {
   if (!start || !end) return null;
 
   // Create a slight curve over the moon surface
-  const midPoint = start.clone().lerp(end, 0.5).normalize().multiplyScalar(5.1); // Slightly higher
+  const midPoint = start.clone().lerp(end, 0.5).normalize().multiplyScalar(5.02); // Just above surface
   
   const curve = new THREE.QuadraticBezierCurve3(start, midPoint, end);
 

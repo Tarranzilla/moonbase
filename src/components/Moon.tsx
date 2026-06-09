@@ -11,6 +11,7 @@ import Mares from './Mares';
 import { LUNAR_CRATERS } from '@/data/craters';
 import { LUNAR_MARES } from '@/data/mares';
 import Buildings from './Buildings';
+import { findShortestPath, getFaceCenter } from '@/utils/geo';
 
 const sunShader = {
   vertexShader: `
@@ -122,6 +123,8 @@ export default function Moon() {
   const setSelectedCell = useGameStore((state) => state.setSelectedCell);
   const selectedCellId = useGameStore((state) => state.selectedCellId);
   const showEquator = useGameStore((state) => state.filters.showEquator);
+  const buildMode = useGameStore((state) => state.buildMode);
+  const connectionStartFace = useGameStore((state) => state.connectionStartFace);
 
   const [hoveredFace, setHoveredFace] = useState<number | null>(null);
   const sunRef = useRef<THREE.Group>(null);
@@ -272,6 +275,25 @@ export default function Moon() {
     return highlightGeo;
   }, [hoveredFace, geometry]);
 
+  const pathPreviewGeometry = useMemo(() => {
+    if (buildMode !== 'CONNECTION' || connectionStartFace === null || hoveredFace === null) return null;
+    if (connectionStartFace === hoveredFace) return null;
+
+    const path = findShortestPath(connectionStartFace, hoveredFace);
+    if (!path || path.length < 2) return null;
+
+    const points: THREE.Vector3[] = [];
+    path.forEach(faceIndex => {
+      const center = getFaceCenter(faceIndex, 5.05); // slightly above surface
+      if (center) points.push(center);
+    });
+
+    // Create a tube or line geometry for the path preview
+    const curve = new THREE.CatmullRomCurve3(points);
+    const tubeGeo = new THREE.TubeGeometry(curve, points.length * 2, 0.03, 4, false);
+    return tubeGeo;
+  }, [buildMode, connectionStartFace, hoveredFace]);
+
   // Compute selected face geometry and marker walls
   const selectedData = useMemo(() => {
     if (!selectedCellId) return null;
@@ -418,13 +440,20 @@ export default function Moon() {
             // First click
             state.setConnectionStartFace(e.faceIndex);
           } else {
-            // Second click: create connection job
-            state.queueBuildJob(state.selectedTeamId, {
-              type: 'CONNECTION',
-              targetFaceIndex: state.connectionStartFace, // They walk to the first node to link
-              secondaryFaceIndex: e.faceIndex
-            });
-            state.setBuildMode('NONE'); // Reset mode
+            // Second click: create connection job(s)
+            const path = findShortestPath(state.connectionStartFace, e.faceIndex);
+            if (path && path.length > 1) {
+              for (let i = 0; i < path.length - 1; i++) {
+                state.queueBuildJob(state.selectedTeamId, {
+                  type: 'CONNECTION',
+                  targetFaceIndex: path[i],
+                  secondaryFaceIndex: path[i+1]
+                });
+              }
+            }
+            // Keep connection mode active and update start face to the end of the new path
+            // This allows sequential placement!
+            state.setConnectionStartFace(e.faceIndex);
           }
         } else {
           // Normal building or deconstruct
@@ -494,6 +523,13 @@ export default function Moon() {
       {/* Hovered Face Highlight */}
       {highlightGeometry && (
         <mesh geometry={highlightGeometry} material={hatchedMaterial} />
+      )}
+
+      {/* Connection Path Preview */}
+      {pathPreviewGeometry && (
+        <mesh geometry={pathPreviewGeometry}>
+          <meshBasicMaterial color="#ffff00" opacity={0.6} transparent />
+        </mesh>
       )}
 
       {/* Selected Face Marker and Highlight */}

@@ -15,6 +15,7 @@ export interface Building {
   mineralsStored: number;
   mineralsMax: number;
   isPowered?: boolean;
+  energyDelta?: number; // Tracks net energy change per in-game hour
 }
 
 export type FlowType = 'BOTH' | 'A_TO_B' | 'B_TO_A' | 'NONE';
@@ -37,13 +38,20 @@ export interface Team {
   
   // What this team is assigned to build when they arrive
   buildJob?: {
-    type: BuildingType | 'CONNECTION' | 'DECONSTRUCT' | 'DECONSTRUCT_CONNECTION';
+    type: BuildMode;
     targetFaceIndex: number;
-    secondaryFaceIndex?: number; // For connections
+    secondaryFaceIndex?: number;
   } | null;
+  
+  // Queue for multiple sequential jobs (e.g. path connections)
+  jobQueue?: Array<{
+    type: BuildMode;
+    targetFaceIndex: number;
+    secondaryFaceIndex?: number;
+  }>;
 }
 
-export type BuildMode = 'NONE' | BuildingType | 'CONNECTION' | 'DECONSTRUCT';
+export type BuildMode = 'NONE' | BuildingType | 'CONNECTION' | 'DECONSTRUCT' | 'DECONSTRUCT_CONNECTION';
 
 interface GameState {
   selectedCellId: string | null;
@@ -142,29 +150,52 @@ export const useGameStore = create<GameState>((set) => ({
   setConnectionStartFace: (faceIndex) => set({ connectionStartFace: faceIndex }),
 
   queueBuildJob: (teamId, job) => set((state) => {
-    // If they are queueing a build job, they must move to the target face
-    // The actual pathing logic might be handled by the click handler, but we set the status
     return {
-      teams: state.teams.map(t => 
-        t.id === teamId 
-          ? { 
-              ...t, 
-              status: 'MOVING_TO_BUILD', 
+      teams: state.teams.map(t => {
+        if (t.id === teamId) {
+          if (t.buildJob) {
+            // Already has a job, append to queue
+            return {
+              ...t,
+              jobQueue: [...(t.jobQueue || []), job!]
+            };
+          } else {
+            // No active job, start immediately
+            return {
+              ...t,
+              status: 'MOVING_TO_BUILD',
               targetFaceIndex: job?.targetFaceIndex ?? t.targetFaceIndex,
-              buildJob: job 
-            } 
-          : t
-      )
+              buildJob: job,
+              jobQueue: []
+            };
+          }
+        }
+        return t;
+      })
     };
   }),
 
   completeBuildJob: (teamId, buildingId) => set((state) => {
     return {
-      teams: state.teams.map(t => 
-        t.id === teamId 
-          ? { ...t, status: 'DEPLOYED', buildJob: null } 
-          : t
-      )
+      teams: state.teams.map(t => {
+        if (t.id === teamId) {
+          const nextJob = t.jobQueue && t.jobQueue.length > 0 ? t.jobQueue[0] : null;
+          const remainingQueue = t.jobQueue && t.jobQueue.length > 0 ? t.jobQueue.slice(1) : [];
+          
+          if (nextJob) {
+            return {
+              ...t,
+              status: 'MOVING_TO_BUILD',
+              targetFaceIndex: nextJob.targetFaceIndex,
+              buildJob: nextJob,
+              jobQueue: remainingQueue
+            };
+          } else {
+            return { ...t, status: 'DEPLOYED', buildJob: null, jobQueue: [] };
+          }
+        }
+        return t;
+      })
     };
   }),
 

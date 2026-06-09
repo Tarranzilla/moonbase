@@ -8,7 +8,7 @@ import Clock from './Clock';
 import CameraControls from './CameraControls';
 import VisualFilters from './VisualFilters';
 import SearchUI from './SearchUI';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 function formatCoords(lat: number, lon: number) {
   const latDir = lat >= 0 ? 'N' : 'S';
@@ -46,6 +46,16 @@ export default function TerminalUI() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRosterExpanded, setIsRosterExpanded] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setBuildMode('NONE');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setBuildMode]);
 
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
 
@@ -322,6 +332,7 @@ export default function TerminalUI() {
                 const building = buildings.find(b => b.faceIndex === parseInt(selectedCellId, 10));
                 if (building) {
                   let isIlluminated = false;
+                  let solarProduction = 0;
                   if (building.type === 'SOLAR_PANEL') {
                     const gameTime = useGameStore.getState().gameTime;
                     const LUNAR_DAY_MS = 28 * 24 * 60 * 60 * 1000;
@@ -331,6 +342,9 @@ export default function TerminalUI() {
                     if (center) {
                       const dot = center.clone().normalize().dot(sunPos);
                       isIlluminated = dot > 0;
+                      if (isIlluminated) {
+                        solarProduction = Math.floor(dot * 100);
+                      }
                     }
                   }
 
@@ -340,7 +354,10 @@ export default function TerminalUI() {
                       <p>TYPE: {building.type}</p>
                       <p>STATUS: <span className={building.status === 'OPERATIONAL' ? 'text-green-400' : 'animate-pulse text-yellow-400'}>{building.status}</span></p>
                       {building.type === 'SOLAR_PANEL' && building.status === 'OPERATIONAL' && (
-                        <p>LIGHT: <span className={isIlluminated ? "text-yellow-400 font-bold" : "text-blue-900"}>{isIlluminated ? "DIRECT SUNLIGHT" : "IN SHADOW"}</span></p>
+                        <>
+                          <p>LIGHT: <span className={isIlluminated ? "text-yellow-400 font-bold" : "text-blue-900"}>{isIlluminated ? "DIRECT SUNLIGHT" : "IN SHADOW"}</span></p>
+                          <p>PRODUCTION: <span className={isIlluminated ? "text-green-400 font-bold" : ""}>+{solarProduction} E/h</span></p>
+                        </>
                       )}
                       {building.type === 'JUNCTION' && building.status === 'OPERATIONAL' && (
                         <div className="mt-2 border-t border-green-500/20 pt-1">
@@ -382,7 +399,17 @@ export default function TerminalUI() {
                         </div>
                       )}
                       {(building.type === 'BATTERY' || building.type === 'CORE') && building.status === 'OPERATIONAL' && (
-                        <p>ENERGY: {Math.floor(building.energyStored)} / {building.energyMax}</p>
+                        <>
+                          <p>ENERGY: {Math.floor(building.energyStored)} / {building.energyMax}</p>
+                          {building.type === 'CORE' && (
+                            <p>CONSUMPTION: <span className="text-red-400 font-bold">-1 E/h</span></p>
+                          )}
+                          {building.energyDelta !== undefined && (
+                            <p>NET FLOW: <span className={building.energyDelta > 0 ? 'text-green-400 font-bold' : building.energyDelta < 0 ? 'text-red-400 font-bold' : ''}>
+                              {building.energyDelta > 0 ? '+' : ''}{building.energyDelta} E/h
+                            </span></p>
+                          )}
+                        </>
                       )}
                       {(building.type === 'WAREHOUSE' || building.type === 'CORE') && building.status === 'OPERATIONAL' && (
                         <>
