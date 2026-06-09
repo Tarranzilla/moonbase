@@ -77,10 +77,12 @@ interface GameState {
   
   addBuilding: (building: Building) => void;
   updateBuilding: (id: string, updates: Partial<Building>) => void;
+  batchUpdateBuildings: (updates: Record<string, Partial<Building>>) => void;
   removeBuilding: (id: string) => void;
   addConnection: (connection: Connection) => void;
   updateConnection: (id: string, updates: Partial<Connection>) => void;
   removeConnection: (id: string) => void;
+  topologyVersion: number;
 
   timeScale: number;
   setTimeScale: (scale: number) => void;
@@ -199,19 +201,42 @@ export const useGameStore = create<GameState>((set) => ({
     };
   }),
 
-  addBuilding: (building) => set((state) => ({ buildings: [...state.buildings, building] })),
+  topologyVersion: 0,
+  addBuilding: (building) => set((state) => ({ 
+    buildings: [...state.buildings, building],
+    topologyVersion: state.topologyVersion + 1
+  })),
   updateBuilding: (id, updates) => set((state) => ({
     buildings: state.buildings.map(b => b.id === id ? { ...b, ...updates } : b)
   })),
+  batchUpdateBuildings: (updates) => set((state) => {
+    let changed = false;
+    const newBuildings = state.buildings.map(b => {
+      if (updates[b.id]) {
+        changed = true;
+        return { ...b, ...updates[b.id] };
+      }
+      return b;
+    });
+    return changed ? { buildings: newBuildings } : state;
+  }),
   removeBuilding: (id) => set((state) => ({
     buildings: state.buildings.filter(b => b.id !== id),
-    connections: state.connections.filter(c => c.id !== id && c.fromFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex && c.toFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex) // remove related connections too! wait, better to just filter out connections touching the faceIndex
+    connections: state.connections.filter(c => c.id !== id && c.fromFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex && c.toFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex),
+    topologyVersion: state.topologyVersion + 1
   })),
-  addConnection: (connection) => set((state) => ({ connections: [...state.connections, connection] })),
+  addConnection: (connection) => set((state) => ({ 
+    connections: [...state.connections, connection],
+    topologyVersion: state.topologyVersion + 1
+  })),
   updateConnection: (id, updates) => set((state) => ({
-    connections: state.connections.map(c => c.id === id ? { ...c, ...updates } : c)
+    connections: state.connections.map(c => c.id === id ? { ...c, ...updates } : c),
+    topologyVersion: state.topologyVersion + 1
   })),
-  removeConnection: (id) => set((state) => ({ connections: state.connections.filter(c => c.id !== id) })),
+  removeConnection: (id) => set((state) => ({ 
+    connections: state.connections.filter(c => c.id !== id),
+    topologyVersion: state.topologyVersion + 1
+  })),
 
   teams: [
     { id: 'eng-1', name: 'ENGINEERING ALPHA', status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0 },

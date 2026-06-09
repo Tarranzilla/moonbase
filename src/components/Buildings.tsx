@@ -4,36 +4,21 @@ import { getFaceCenter } from '@/utils/geo';
 import { useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 
-function BuildingMaterial({ color, isBuilding, isHovered, isDeconstructMode }: { color: string, isBuilding?: boolean, isHovered?: boolean, isDeconstructMode?: boolean }) {
-  const matRef = useRef<THREE.MeshBasicMaterial>(null);
-  
-  useFrame((state) => {
-    if (!matRef.current) return;
-    if (isDeconstructMode && isHovered) {
-      matRef.current.color.set('#ff0000');
-      matRef.current.opacity = 0.8 + Math.sin(state.clock.elapsedTime * 10) * 0.2;
-    } else {
-      matRef.current.color.set(color);
-      if (isBuilding) {
-        matRef.current.opacity = 0.2 + Math.abs(Math.sin(state.clock.elapsedTime * 3)) * 0.4;
-      } else {
-        matRef.current.opacity = 1;
-      }
-    }
-  });
+import { useShallow } from 'zustand/react/shallow';
 
+function BuildingMaterial({ color, isBuilding, isHovered, isDeconstructMode }: { color: string, isBuilding?: boolean, isHovered?: boolean, isDeconstructMode?: boolean }) {
+  const isTargeted = isDeconstructMode && isHovered;
   return (
     <meshBasicMaterial 
-      ref={matRef}
-      color={color} 
+      color={isTargeted ? '#ff0000' : color} 
       wireframe={true} 
       transparent={true}
-      opacity={isBuilding ? 0.3 : 1} 
+      opacity={isTargeted ? 0.8 : isBuilding ? 0.3 : 1} 
     />
   );
 }
 
-function useBuildingInteractions(building: Building) {
+function useBuildingInteractions(building: { faceIndex: number }) {
   const [isHovered, setIsHovered] = useState(false);
   const buildMode = useGameStore(state => state.buildMode);
   const selectedTeamId = useGameStore(state => state.selectedTeamId);
@@ -65,9 +50,34 @@ function useBuildingInteractions(building: Building) {
 }
 
 export default function Buildings() {
-  const buildings = useGameStore(state => state.buildings);
-  const connections = useGameStore(state => state.connections);
-  const gameTime = useGameStore(state => state.gameTime);
+  const buildingsData = useGameStore(useShallow(state => 
+    state.buildings.map(b => `${b.id}:${b.type}:${b.faceIndex}:${b.status}:${b.energyMax ? Math.round((b.energyStored / b.energyMax) * 10) / 10 : 0}`)
+  ));
+
+  const connectionsData = useGameStore(useShallow(state => 
+    state.connections.map(c => `${c.id}:${c.fromFaceIndex}:${c.toFaceIndex}:${c.flowType}`)
+  ));
+
+  const buildings = useMemo(() => buildingsData.map(str => {
+    const parts = str.split(':');
+    return { 
+      id: parts[0], 
+      type: parts[1], 
+      faceIndex: parseInt(parts[2]), 
+      status: parts[3], 
+      energyLevel: parseFloat(parts[4]) 
+    };
+  }), [buildingsData]);
+
+  const connections = useMemo(() => connectionsData.map(str => {
+    const parts = str.split(':');
+    return {
+      id: parts[0],
+      fromFaceIndex: parseInt(parts[1]),
+      toFaceIndex: parseInt(parts[2]),
+      flowType: parts[3]
+    };
+  }), [connectionsData]);
 
   // Group by type for instanced rendering or simple mapping
   const solarPanels = buildings.filter(b => b.type === 'SOLAR_PANEL');
@@ -91,21 +101,18 @@ export default function Buildings() {
 
   return (
     <group>
-      {solarPanels.map(b => <SolarPanel key={b.id} building={b} gameTime={gameTime} />)}
-      {batteries.map(b => <Battery key={b.id} building={b} gameTime={gameTime} />)}
-      {nodes.map(b => <Junction key={b.id} building={b} gameTime={gameTime} />)}
-      {iceExtractors.map(b => <IceExtractor key={b.id} building={b} gameTime={gameTime} />)}
-      {mineralExtractors.map(b => <MineralExtractor key={b.id} building={b} gameTime={gameTime} />)}
-      {warehouses.map(b => <Warehouse key={b.id} building={b} gameTime={gameTime} />)}
-      {/* Core Structures */}
-      {cores.map(c => <Core key={c.id} building={c} gameTime={gameTime} />)}
+      {solarPanels.map(b => <SolarPanel key={b.id} building={b as any} gameTime={0} />)}
+      {batteries.map(b => <Battery key={b.id} building={b as any} gameTime={0} />)}
+      {nodes.map(b => <Junction key={b.id} building={b as any} gameTime={0} />)}
+      {iceExtractors.map(b => <IceExtractor key={b.id} building={b as any} gameTime={0} />)}
+      {mineralExtractors.map(b => <MineralExtractor key={b.id} building={b as any} gameTime={0} />)}
+      {warehouses.map(b => <Warehouse key={b.id} building={b as any} gameTime={0} />)}
+      {cores.map(c => <Core key={c.id} building={c as any} gameTime={0} />)}
 
-      {/* Relays */}
       {relayFaces.map(faceIndex => <PowerRelay key={`relay-${faceIndex}`} faceIndex={faceIndex} />)}
 
-      {/* Power Lines */}
       {connections.map((c, idx) => (
-        <PowerLine key={idx} connection={c} />
+        <PowerLine key={idx} connection={c as any} />
       ))}
     </group>
   );
@@ -129,7 +136,7 @@ function PowerRelay({ faceIndex }: { faceIndex: number }) {
   );
 }
 
-function SolarPanel({ building, gameTime }: { building: Building, gameTime: number }) {
+function SolarPanel({ building, gameTime }: { building: any, gameTime: number }) {
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -180,7 +187,7 @@ function DeconstructCross() {
   );
 }
 
-function Battery({ building, gameTime }: { building: Building, gameTime: number }) {
+function Battery({ building, gameTime }: { building: any, gameTime: number }) {
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -189,7 +196,7 @@ function Battery({ building, gameTime }: { building: Building, gameTime: number 
   const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const fillRatio = building.energyStored / building.energyMax;
+  const fillRatio = building.energyLevel;
   const { isHovered, isDeconstructMode, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
 
   return (
@@ -219,7 +226,7 @@ function Battery({ building, gameTime }: { building: Building, gameTime: number 
   );
 }
 
-function Junction({ building, gameTime }: { building: Building, gameTime: number }) {
+function Junction({ building, gameTime }: { building: any, gameTime: number }) {
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -246,7 +253,7 @@ function Junction({ building, gameTime }: { building: Building, gameTime: number
 }
 
 
-function IceExtractor({ building, gameTime }: { building: Building, gameTime: number }) {
+function IceExtractor({ building, gameTime }: { building: any, gameTime: number }) {
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -282,7 +289,7 @@ function IceExtractor({ building, gameTime }: { building: Building, gameTime: nu
   );
 }
 
-function MineralExtractor({ building, gameTime }: { building: Building, gameTime: number }) {
+function MineralExtractor({ building, gameTime }: { building: any, gameTime: number }) {
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -318,7 +325,7 @@ function MineralExtractor({ building, gameTime }: { building: Building, gameTime
   );
 }
 
-function Warehouse({ building, gameTime }: { building: Building, gameTime: number }) {
+function Warehouse({ building, gameTime }: { building: any, gameTime: number }) {
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -353,7 +360,7 @@ function Warehouse({ building, gameTime }: { building: Building, gameTime: numbe
   );
 }
 
-function Core({ building, gameTime }: { building: Building, gameTime: number }) {
+function Core({ building, gameTime }: { building: any, gameTime: number }) {
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -387,7 +394,7 @@ function Core({ building, gameTime }: { building: Building, gameTime: number }) 
   );
 }
 
-function useConnectionInteractions(connection: Connection) {
+function useConnectionInteractions(connection: { fromFaceIndex: number, toFaceIndex: number }) {
   const [isHovered, setIsHovered] = useState(false);
   const buildMode = useGameStore(state => state.buildMode);
   const selectedTeamId = useGameStore(state => state.selectedTeamId);
@@ -411,19 +418,20 @@ function useConnectionInteractions(connection: Connection) {
   return { isHovered, isDeconstructMode, handlePointerOver, handlePointerOut, handleClick };
 }
 
-function PowerLine({ connection }: { connection: Connection }) {
-  const start = getFaceCenter(connection.fromFaceIndex);
-  const end = getFaceCenter(connection.toFaceIndex);
-  if (!start || !end) return null;
-
-  // Create a slight curve over the moon surface
-  const midPoint = start.clone().lerp(end, 0.5).normalize().multiplyScalar(5.02); // Just above surface
-  
-  const curve = new THREE.QuadraticBezierCurve3(start, midPoint, end);
+function PowerLine({ connection }: { connection: { fromFaceIndex: number, toFaceIndex: number } }) {
+  const curve = useMemo(() => {
+    const start = getFaceCenter(connection.fromFaceIndex);
+    const end = getFaceCenter(connection.toFaceIndex);
+    if (!start || !end) return null;
+    const midPoint = start.clone().lerp(end, 0.5).normalize().multiplyScalar(5.02);
+    return new THREE.QuadraticBezierCurve3(start, midPoint, end);
+  }, [connection.fromFaceIndex, connection.toFaceIndex]);
 
   const { isHovered, isDeconstructMode, handlePointerOver, handlePointerOut, handleClick } = useConnectionInteractions(connection);
 
   const isTargeted = isDeconstructMode && isHovered;
+
+  if (!curve) return null;
 
   return (
     <mesh 
