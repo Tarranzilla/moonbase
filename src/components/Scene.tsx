@@ -7,6 +7,7 @@ import { EffectComposer, Bloom, Vignette, Scanline } from '@react-three/postproc
 import Moon from './Moon';
 import CameraController from './CameraController';
 import { useGameStore } from '@/store/useGameStore';
+import { GameEngine } from './GameEngine';
 
 export default function Scene() {
   const autoRotate = useGameStore((state) => state.autoRotate);
@@ -20,6 +21,7 @@ export default function Scene() {
           useGameStore.getState().setSelectedTeam(null);
         }}
       >
+        <GameEngine />
         <color attach="background" args={['#050505']} />
         <ambientLight intensity={0.5} />
         <Suspense fallback={null}>

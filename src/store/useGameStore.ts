@@ -1,14 +1,39 @@
 import { create } from 'zustand';
 
+export interface Building {
+  id: string;
+  type: 'SOLAR_PANEL' | 'BATTERY' | 'NODE';
+  faceIndex: number;
+  status: 'UNDER_CONSTRUCTION' | 'OPERATIONAL';
+  completionTime: number | null; // null if operational or not yet started
+  energyStored: number;
+  energyMax: number;
+}
+
+export interface Connection {
+  id: string;
+  fromFaceIndex: number;
+  toFaceIndex: number;
+}
+
 export interface Team {
   id: string;
   name: string;
-  status: 'AVAILABLE' | 'DEPLOYED';
+  status: 'AVAILABLE' | 'DEPLOYED' | 'MOVING_TO' | 'MOVING_TO_BUILD' | 'BUILDING';
   faceIndex: number | null;
   path: number[];
   targetFaceIndex: number | null;
   arrivalTime: number;
+  
+  // What this team is assigned to build when they arrive
+  buildJob?: {
+    type: 'SOLAR_PANEL' | 'BATTERY' | 'NODE' | 'CONNECTION' | 'DECONSTRUCT';
+    targetFaceIndex: number;
+    secondaryFaceIndex?: number; // For connections
+  } | null;
 }
+
+export type BuildMode = 'NONE' | 'SOLAR_PANEL' | 'BATTERY' | 'NODE' | 'CONNECTION' | 'DECONSTRUCT';
 
 interface GameState {
   selectedCellId: string | null;
@@ -22,6 +47,21 @@ interface GameState {
   moveTeam: (teamId: string, targetFaceIndex: number) => void;
   setTeamPath: (teamId: string, path: number[]) => void;
   updateTeamProgress: (teamId: string, newFaceIndex: number, newPath: number[]) => void;
+  
+  buildings: Building[];
+  connections: Connection[];
+  buildMode: BuildMode;
+  connectionStartFace: number | null;
+  setBuildMode: (mode: BuildMode) => void;
+  setConnectionStartFace: (faceIndex: number | null) => void;
+  queueBuildJob: (teamId: string, job: Team['buildJob']) => void;
+  completeBuildJob: (teamId: string, buildingId: string) => void;
+  
+  addBuilding: (building: Building) => void;
+  updateBuilding: (id: string, updates: Partial<Building>) => void;
+  removeBuilding: (id: string) => void;
+  addConnection: (connection: Connection) => void;
+  removeConnection: (id: string) => void;
 
   timeScale: number;
   setTimeScale: (scale: number) => void;
@@ -83,6 +123,51 @@ export const useGameStore = create<GameState>((set) => ({
     });
   },
 
+  buildings: [],
+  connections: [],
+  buildMode: 'NONE',
+  connectionStartFace: null,
+  setBuildMode: (mode) => set({ buildMode: mode, connectionStartFace: null }),
+  setConnectionStartFace: (faceIndex) => set({ connectionStartFace: faceIndex }),
+
+  queueBuildJob: (teamId, job) => set((state) => {
+    // If they are queueing a build job, they must move to the target face
+    // The actual pathing logic might be handled by the click handler, but we set the status
+    return {
+      teams: state.teams.map(t => 
+        t.id === teamId 
+          ? { 
+              ...t, 
+              status: 'MOVING_TO_BUILD', 
+              targetFaceIndex: job?.targetFaceIndex ?? t.targetFaceIndex,
+              buildJob: job 
+            } 
+          : t
+      )
+    };
+  }),
+
+  completeBuildJob: (teamId, buildingId) => set((state) => {
+    return {
+      teams: state.teams.map(t => 
+        t.id === teamId 
+          ? { ...t, status: 'DEPLOYED', buildJob: null } 
+          : t
+      )
+    };
+  }),
+
+  addBuilding: (building) => set((state) => ({ buildings: [...state.buildings, building] })),
+  updateBuilding: (id, updates) => set((state) => ({
+    buildings: state.buildings.map(b => b.id === id ? { ...b, ...updates } : b)
+  })),
+  removeBuilding: (id) => set((state) => ({
+    buildings: state.buildings.filter(b => b.id !== id),
+    connections: state.connections.filter(c => c.id !== id && c.fromFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex && c.toFaceIndex !== state.buildings.find(b=>b.id===id)?.faceIndex) // remove related connections too! wait, better to just filter out connections touching the faceIndex
+  })),
+  addConnection: (connection) => set((state) => ({ connections: [...state.connections, connection] })),
+  removeConnection: (id) => set((state) => ({ connections: state.connections.filter(c => c.id !== id) })),
+
   teams: [
     { id: 'eng-1', name: 'ENGINEERING ALPHA', status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0 },
     { id: 'eng-2', name: 'ENGINEERING BETA', status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0 },
@@ -102,7 +187,7 @@ export const useGameStore = create<GameState>((set) => ({
   moveTeam: (teamId, targetFaceIndex) => set((state) => ({
     teams: state.teams.map(t =>
       t.id === teamId
-        ? { ...t, targetFaceIndex, path: [] }
+        ? { ...t, targetFaceIndex, path: [], status: 'MOVING_TO' }
         : t
     )
   })),

@@ -21,7 +21,7 @@ let cachedIcosahedron: THREE.IcosahedronGeometry | null = null;
 
 export function getFaceCenter(faceIndex: number, radius: number = SIM_MOON_RADIUS): THREE.Vector3 | null {
   if (!cachedIcosahedron) {
-    cachedIcosahedron = new THREE.IcosahedronGeometry(radius, 2);
+    cachedIcosahedron = new THREE.IcosahedronGeometry(radius, 4);
     cachedIcosahedron.computeVertexNormals();
   }
 

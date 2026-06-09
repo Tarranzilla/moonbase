@@ -10,7 +10,7 @@ export default function SearchUI() {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const { focusTarget, cameraTarget, teams } = useGameStore();
+  const { focusTarget, cameraTarget, teams, buildings } = useGameStore();
 
   // Reset selected index when query changes
   useEffect(() => {
@@ -93,7 +93,24 @@ export default function SearchUI() {
       }
     });
 
-    // 5. Cells
+    // 5. Buildings
+    buildings.forEach((b) => {
+      if (b.type.toLowerCase().includes(q) || b.id.toLowerCase().includes(q)) {
+        results.push({
+          id: b.id,
+          type: 'STRUCTURE',
+          name: `${b.type.replace('_', ' ')} [${b.faceIndex}]`,
+          onSelect: () => {
+            const pos = getFaceCenter(b.faceIndex, SIM_MOON_RADIUS);
+            if (pos) {
+              focusTarget({ type: 'ENTITY', id: b.id, pos, name: `STRUCTURE: ${b.type}` });
+            }
+          }
+        });
+      }
+    });
+
+    // 6. Cells
     const cellId = parseInt(q, 10);
     if (!isNaN(cellId) && cellId >= 0 && cellId <= 319) {
       results.push({
@@ -157,7 +174,7 @@ export default function SearchUI() {
 
       {/* Results Dropdown */}
       {isFocused && displayResults.length > 0 && (
-        <div className="pointer-events-auto mt-1 border border-green-500/30 bg-black/80 backdrop-blur-sm shadow-[0_0_15px_rgba(0,255,0,0.1)] max-h-60 overflow-y-auto font-mono text-xs">
+        <div className="pointer-events-auto mt-1 border border-green-500/30 bg-black/80 backdrop-blur-sm shadow-[0_0_15px_rgba(0,255,0,0.1)] max-h-60 overflow-y-auto font-mono text-xs terminal-scrollbar">
           {displayResults.map((res, idx) => (
             <button
               key={res.id}

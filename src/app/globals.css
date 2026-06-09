@@ -23,3 +23,23 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Custom Scrollbar */
+.terminal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 0, 0.4) rgba(0, 255, 0, 0.05);
+}
+.terminal-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.terminal-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 255, 0, 0.05);
+  border-left: 1px solid rgba(0, 255, 0, 0.2);
+}
+.terminal-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 0, 0.4);
+  border: 1px solid rgba(0, 255, 0, 0.2);
+}
+.terminal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 0, 0.8);
+}

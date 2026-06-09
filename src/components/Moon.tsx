@@ -8,6 +8,9 @@ import { useGameStore } from '@/store/useGameStore';
 import Engineers from './Engineers';
 import Craters from './Craters';
 import Mares from './Mares';
+import { LUNAR_CRATERS } from '@/data/craters';
+import { LUNAR_MARES } from '@/data/mares';
+import Buildings from './Buildings';
 
 const sunShader = {
   vertexShader: `
@@ -407,12 +410,39 @@ export default function Moon() {
       const lat = Math.asin(center.y / radius) * (180 / Math.PI);
       const lon = Math.atan2(center.x, center.z) * (180 / Math.PI);
 
-      setSelectedCell(e.faceIndex.toString(), { lat, lon });
+      const state = useGameStore.getState();
+      
+      if (state.buildMode !== 'NONE' && state.selectedTeamId) {
+        if (state.buildMode === 'CONNECTION') {
+          if (state.connectionStartFace === null) {
+            // First click
+            state.setConnectionStartFace(e.faceIndex);
+          } else {
+            // Second click: create connection job
+            state.queueBuildJob(state.selectedTeamId, {
+              type: 'CONNECTION',
+              targetFaceIndex: state.connectionStartFace, // They walk to the first node to link
+              secondaryFaceIndex: e.faceIndex
+            });
+            state.setBuildMode('NONE'); // Reset mode
+          }
+        } else {
+          // Normal building or deconstruct
+          state.queueBuildJob(state.selectedTeamId, {
+            type: state.buildMode,
+            targetFaceIndex: e.faceIndex
+          });
+          state.setBuildMode('NONE'); // Reset mode after placing
+        }
+      } else {
+        setSelectedCell(e.faceIndex.toString(), { lat, lon });
+      }
     }
   };
 
   return (
     <group>
+      <Buildings />
       {/* Main Moon Mesh */}
       <mesh
         geometry={geometry}

@@ -41,7 +41,7 @@ export default function Engineers({ geometry }: EngineersProps) {
 
   return (
     <group>
-      {teams.filter(t => t.status === 'DEPLOYED').map(team => (
+      {teams.filter(t => t.status !== 'AVAILABLE').map(team => (
         <EngineerToken 
           key={team.id} 
           team={team} 
@@ -104,12 +104,10 @@ function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, u
   useFrame((state, realDelta) => {
     if (!meshRef.current || !currentPos || !currentNormal || team.faceIndex === null) return;
 
-    const delta = realDelta * timeScale;
-
     // Calculate Stacking Altitude
     let targetAltitude = 0;
     if (team.path.length === 0) {
-      const sameCellTeams = teams.filter(t => t.status === 'DEPLOYED' && t.faceIndex === team.faceIndex && t.path.length === 0);
+      const sameCellTeams = teams.filter(t => t.status !== 'AVAILABLE' && t.faceIndex === team.faceIndex && t.path.length === 0);
       let stackIndex = 0;
       for (const other of sameCellTeams) {
         if (other.id !== team.id) {
@@ -120,14 +118,18 @@ function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, u
           }
         }
       }
-      targetAltitude = stackIndex * 0.4;
+      targetAltitude = stackIndex * 0.6;
     }
 
-    const newAltitude = THREE.MathUtils.lerp(currentAltitude, targetAltitude, timeScale === 0 ? 0 : 10 * delta);
+    // Use realDelta for UI animations so it doesn't explode when fast-forwarding game time!
+    const newAltitude = THREE.MathUtils.lerp(currentAltitude, targetAltitude, 10 * realDelta);
     setCurrentAltitude(newAltitude);
 
     let displayPos = currentPos.clone();
     let displayNormal = currentNormal.clone();
+
+    // Only use timeScale for actual game movement
+    const gameDelta = realDelta * timeScale;
 
     if (team.path.length > 0 && timeScale > 0) {
       const nextFace = team.path[0];
@@ -136,7 +138,7 @@ function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, u
       const targetPos = nextCenter.clone().add(nextNormal.clone().multiplyScalar(0.2));
       
       const speed = 4.0; // Units per second
-      const step = speed * delta;
+      const step = speed * gameDelta;
       const dist = currentPos.distanceTo(targetPos);
       
       if (dist <= step) {
@@ -150,7 +152,7 @@ function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, u
         // Lerp position and normal
         displayPos = currentPos.clone().lerp(targetPos, step / dist);
         // Keep it exactly on the surface, accounting for the current jumping/stacking altitude
-        displayPos.normalize().multiplyScalar(5.2 + newAltitude);
+        displayPos.normalize().multiplyScalar(5.5 + newAltitude);
         setCurrentPos(displayPos);
         
         displayNormal = currentNormal.clone().lerp(nextNormal, step / dist).normalize();
@@ -158,7 +160,7 @@ function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, u
       }
     } else {
       // If not moving horizontally, apply vertical stacking offset
-      displayPos.normalize().multiplyScalar(5.2 + newAltitude);
+      displayPos.normalize().multiplyScalar(5.5 + newAltitude);
     }
 
     meshRef.current.position.copy(displayPos);
@@ -185,7 +187,8 @@ function EngineerToken({ team, teams, timeScale, geometry, graph, setTeamPath, u
       <octahedronGeometry args={[0.2, 0]} />
       <meshBasicMaterial 
         color={isSelected ? "#ffffff" : "#00ff00"} 
-        wireframe={!isSelected} 
+        wireframe={true}
+        wireframeLinewidth={isSelected ? 2 : 1}
       />
     </mesh>
   );
