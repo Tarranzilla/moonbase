@@ -12,6 +12,8 @@ export function GameEngine() {
   const bothGraphRef = useRef<Map<number, number[]>>(new Map());
   const componentsRef = useRef<number[][]>([]);
   const faceToCompRef = useRef<Map<number, number>>(new Map());
+  const reachableCacheRef = useRef<Map<string, Building[]>>(new Map());
+  const timeAccumulator = useRef<number>(0);
 
   useFrame((state, delta) => {
     const store = useGameStore.getState();
@@ -86,17 +88,6 @@ export function GameEngine() {
     });
 
     if (timeScale > 0) {
-      const GAME_SECONDS_PER_REAL_SECOND = 60;
-      const inGameSeconds = delta * timeScale * GAME_SECONDS_PER_REAL_SECOND;
-      const inGameHoursElapsed = inGameSeconds / 3600;
-      
-      const theta = ((gameTime % LUNAR_DAY_MS) / LUNAR_DAY_MS) * Math.PI * 2;
-      const sunPos = new THREE.Vector3(Math.cos(theta), 0, Math.sin(theta)).normalize();
-      
-      const initialEnergy = new Map<string, number>();
-      store.buildings.forEach(b => {
-        if (b.type === 'BATTERY' || b.type === 'CORE') initialEnergy.set(b.id, b.energyStored);
-      });
 
       if (store.topologyVersion !== lastTopologyVersion.current) {
         lastTopologyVersion.current = store.topologyVersion;
@@ -147,6 +138,7 @@ export function GameEngine() {
         bothGraphRef.current = bothGraph;
         componentsRef.current = components;
         faceToCompRef.current = faceToComp;
+        reachableCacheRef.current.clear();
       }
 
       const outGraph = outGraphRef.current;
@@ -155,27 +147,58 @@ export function GameEngine() {
       const components = componentsRef.current;
       const faceToComp = faceToCompRef.current;
 
-      const findReachable = (startFace: number, graph: Map<number, number[]>, targetTypes: string[]) => {
-        const visited = new Set<number>();
-        const queue = [startFace];
-        visited.add(startFace);
-        const reachableBuildings: Building[] = [];
-        while (queue.length > 0) {
-          const curr = queue.shift()!;
-          const b = store.buildings.find(b => b.faceIndex === curr);
-          if (b && targetTypes.includes(b.type)) reachableBuildings.push(b);
-          for (const n of graph.get(curr) || []) {
-            if (!visited.has(n)) { visited.add(n); queue.push(n); }
-          }
-        }
-        return reachableBuildings;
-      };
+      const GAME_SECONDS_PER_REAL_SECOND = 60;
+      const theta = ((gameTime % LUNAR_DAY_MS) / LUNAR_DAY_MS) * Math.PI * 2;
+      const sunPos = new THREE.Vector3(Math.cos(theta), 0, Math.sin(theta)).normalize();
 
-      const pendingUpdates: Record<string, Partial<Building>> = {};
-      const getB = (id: string) => ({ ...(store.buildings.find(b => b.id === id) || {} as Building), ...(pendingUpdates[id] || {}) });
-      const updateB = (id: string, updates: Partial<Building>) => {
-        pendingUpdates[id] = { ...(pendingUpdates[id] || {}), ...updates };
-      };
+      timeAccumulator.current += delta;
+      
+      // Run simulation logic at a fixed tick rate (10 ticks per second)
+      if (timeAccumulator.current >= 0.1) {
+        const tickDelta = timeAccumulator.current;
+        timeAccumulator.current = 0;
+        
+        const inGameSeconds = tickDelta * timeScale * GAME_SECONDS_PER_REAL_SECOND;
+        const inGameHoursElapsed = inGameSeconds / 3600;
+
+        const initialEnergy = new Map<string, number>();
+        store.buildings.forEach(b => {
+          if (b.type === 'BATTERY' || b.type === 'CORE') initialEnergy.set(b.id, b.energyStored);
+        });
+
+        // O(1) Lookup Maps
+        const buildingMap = new Map<number, Building>();
+        const buildingIdMap = new Map<string, Building>();
+        store.buildings.forEach(b => {
+          buildingMap.set(b.faceIndex, b);
+          buildingIdMap.set(b.id, b);
+        });
+
+        const findReachable = (startFace: number, graph: Map<number, number[]>, targetTypes: string[], isOutGraph: boolean) => {
+          const cacheKey = `${startFace}:${targetTypes.join(',')}:${isOutGraph}`;
+          if (reachableCacheRef.current.has(cacheKey)) return reachableCacheRef.current.get(cacheKey)!;
+
+          const visited = new Set<number>();
+          const queue = [startFace];
+          visited.add(startFace);
+          const reachableBuildings: Building[] = [];
+          while (queue.length > 0) {
+            const curr = queue.shift()!;
+            const b = buildingMap.get(curr);
+            if (b && targetTypes.includes(b.type)) reachableBuildings.push(b);
+            for (const n of graph.get(curr) || []) {
+              if (!visited.has(n)) { visited.add(n); queue.push(n); }
+            }
+          }
+          reachableCacheRef.current.set(cacheKey, reachableBuildings);
+          return reachableBuildings;
+        };
+
+        const pendingUpdates: Record<string, Partial<Building>> = {};
+        const getB = (id: string) => ({ ...(buildingIdMap.get(id) || {} as Building), ...(pendingUpdates[id] || {}) });
+        const updateB = (id: string, updates: Partial<Building>) => {
+          pendingUpdates[id] = { ...(pendingUpdates[id] || {}), ...updates };
+        };
 
       // 1. Solar Panels
       const panels = store.buildings.filter(b => b.type === 'SOLAR_PANEL' && b.status === 'OPERATIONAL' && b.isOn !== false);
@@ -185,7 +208,7 @@ export function GameEngine() {
           const dot = center.clone().normalize().dot(sunPos);
           if (dot > 0) {
             const energy = dot * 100 * inGameHoursElapsed;
-            const sinks = findReachable(panel.faceIndex, outGraph, ['BATTERY', 'CORE']);
+            const sinks = findReachable(panel.faceIndex, outGraph, ['BATTERY', 'CORE'], true);
             if (sinks.length > 0) {
               const liveSinks = sinks.map(s => getB(s.id));
               const totalSpace = liveSinks.reduce((sum, s) => sum + Math.max(0, s.energyMax - s.energyStored), 0);
@@ -212,7 +235,7 @@ export function GameEngine() {
       // 3. Extractors
       const processExtractor = (ext: Building, resourceType: 'water' | 'minerals') => {
         const currentExt = getB(ext.id);
-        const liveSinks = findReachable(ext.faceIndex, outGraph, ['WAREHOUSE', 'CORE']).map(s => getB(s.id));
+        const liveSinks = findReachable(ext.faceIndex, outGraph, ['WAREHOUSE', 'CORE'], true).map(s => getB(s.id));
         let totalSpace = 0;
         liveSinks.forEach(sink => totalSpace += Math.max(0, resourceType === 'water' ? sink.waterMax - sink.waterStored : sink.mineralsMax - sink.mineralsStored));
 
@@ -225,7 +248,7 @@ export function GameEngine() {
 
         const rate = currentExt.extractionRate ?? 1.0;
         const energyNeeded = 10 * rate * inGameHoursElapsed;
-        const liveSources = findReachable(ext.faceIndex, inGraph, ['BATTERY', 'CORE']).map(s => getB(s.id));
+        const liveSources = findReachable(ext.faceIndex, inGraph, ['BATTERY', 'CORE'], false).map(s => getB(s.id));
         const totalAvailable = liveSources.reduce((sum, b) => sum + b.energyStored, 0);
         
         if (totalAvailable >= energyNeeded) {
@@ -286,7 +309,7 @@ export function GameEngine() {
         if (sourcePct <= 0) return;
 
         const sourceComp = faceToComp.get(source.faceIndex);
-        const validSinks = findReachable(source.faceIndex, outGraph, ['BATTERY', 'CORE'])
+        const validSinks = findReachable(source.faceIndex, outGraph, ['BATTERY', 'CORE'], true)
           .filter(s => s.id !== source.id && (sourceComp === undefined || faceToComp.get(s.faceIndex) !== sourceComp))
           .map(s => getB(s.id)).filter(s => (s.energyStored / s.energyMax) < sourcePct);
         
@@ -310,9 +333,10 @@ export function GameEngine() {
         }
       });
 
-      if (Object.keys(pendingUpdates).length > 0) {
-        store.batchUpdateBuildings(pendingUpdates);
-      }
+        if (Object.keys(pendingUpdates).length > 0) {
+          store.batchUpdateBuildings(pendingUpdates);
+        }
+      } // end of tick logic
     }
   });
 

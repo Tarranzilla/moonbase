@@ -104,6 +104,8 @@ export default function TerminalUI() {
   const maxWater = buildings.reduce((sum, b) => sum + (b.waterMax || 0), 0);
   const totalMinerals = buildings.reduce((sum, b) => sum + (b.mineralsStored || 0), 0);
   const maxMinerals = buildings.reduce((sum, b) => sum + (b.mineralsMax || 0), 0);
+  const totalPower = buildings.reduce((sum, b) => sum + (b.energyStored || 0), 0);
+  const maxPower = buildings.reduce((sum, b) => sum + (b.energyMax || 0), 0);
 
   return (
     <div className="absolute inset-0 pointer-events-none p-2 md:p-8 flex flex-col justify-between font-mono text-green-500 z-10 overflow-hidden">
@@ -123,6 +125,7 @@ export default function TerminalUI() {
               <div className="flex gap-3 md:gap-6 items-center">
                 <p className="text-[10px] md:text-sm opacity-80">OFFLINE SANDBOX // V0.1.0</p>
                 <div className="flex gap-2 bg-black/60 px-2 py-0.5 border border-green-500/30">
+                  <p className="text-[9px] md:text-xs text-yellow-400">PWR: {Math.floor(totalPower)}/{maxPower}</p>
                   <p className="text-[9px] md:text-xs text-cyan-400">H2O: {Math.floor(totalWater)}/{maxWater}</p>
                   <p className="text-[9px] md:text-xs text-orange-400">MIN: {Math.floor(totalMinerals)}/{maxMinerals}</p>
                 </div>
