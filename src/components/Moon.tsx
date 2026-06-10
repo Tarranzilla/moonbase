@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -241,6 +241,14 @@ export default function Moon() {
     });
   }, []);
 
+  const isBuildingMode = buildMode !== 'NONE' && buildMode !== 'DECONSTRUCT';
+
+  useEffect(() => {
+    const colorHex = isBuildingMode ? "#eab308" : "#00ff00";
+    hatchedMaterial.uniforms.color.value.set(colorHex);
+    wallMaterial.uniforms.color.value.set(colorHex);
+  }, [isBuildingMode, hatchedMaterial, wallMaterial]);
+
   // Compute vertices for the hovered face to draw an outline or highlight
   const highlightGeometry = useMemo(() => {
     if (hoveredFace === null) return null;
@@ -443,12 +451,36 @@ export default function Moon() {
             // Second click: create connection job(s)
             const path = findShortestPath(state.connectionStartFace, e.faceIndex);
             if (path && path.length > 1) {
-              for (let i = 0; i < path.length - 1; i++) {
-                state.queueBuildJob(state.selectedTeamId, {
-                  type: 'CONNECTION',
-                  targetFaceIndex: path[i],
-                  secondaryFaceIndex: path[i+1]
+              const pendingJobs: { f1: number, f2: number }[] = [];
+              state.teams.forEach(t => {
+                const jobs = [t.buildJob, ...(t.jobQueue || [])];
+                jobs.forEach(j => {
+                  if (j && j.type === 'CONNECTION' && j.secondaryFaceIndex !== undefined) {
+                     pendingJobs.push({ f1: j.targetFaceIndex, f2: j.secondaryFaceIndex });
+                  }
                 });
+              });
+
+              for (let i = 0; i < path.length - 1; i++) {
+                const f1 = path[i];
+                const f2 = path[i+1];
+                
+                const alreadyBuilt = state.connections.some(c => 
+                  (c.fromFaceIndex === f1 && c.toFaceIndex === f2) ||
+                  (c.fromFaceIndex === f2 && c.toFaceIndex === f1)
+                );
+                const alreadyQueued = pendingJobs.some(j => 
+                  (j.f1 === f1 && j.f2 === f2) ||
+                  (j.f1 === f2 && j.f2 === f1)
+                );
+
+                if (!alreadyBuilt && !alreadyQueued) {
+                  state.queueBuildJob(state.selectedTeamId, {
+                    type: 'CONNECTION',
+                    targetFaceIndex: f1,
+                    secondaryFaceIndex: f2
+                  });
+                }
               }
             }
             // Keep connection mode active and update start face to the end of the new path
@@ -461,7 +493,9 @@ export default function Moon() {
             type: state.buildMode,
             targetFaceIndex: e.faceIndex
           });
-          state.setBuildMode('NONE'); // Reset mode after placing
+          if (!e.shiftKey) {
+            state.setBuildMode('NONE'); // Reset mode after placing
+          }
         }
       } else {
         setSelectedCell(e.faceIndex.toString(), { lat, lon });
@@ -471,7 +505,7 @@ export default function Moon() {
 
   return (
     <group>
-      <Buildings />
+      <Buildings hoveredFace={hoveredFace} />
       {/* Main Moon Mesh */}
       <mesh
         geometry={geometry}
@@ -528,7 +562,7 @@ export default function Moon() {
       {/* Connection Path Preview */}
       {pathPreviewGeometry && (
         <mesh geometry={pathPreviewGeometry}>
-          <meshBasicMaterial color="#ffff00" opacity={0.6} transparent />
+          <meshBasicMaterial color="#eab308" opacity={0.6} transparent />
         </mesh>
       )}
 
@@ -537,14 +571,14 @@ export default function Moon() {
         <group>
           {/* Solid highlighted face */}
           <mesh geometry={selectedData.faceGeo}>
-            <meshBasicMaterial color="#00ff00" side={THREE.DoubleSide} opacity={0.4} transparent />
+            <meshBasicMaterial color={isBuildingMode ? "#eab308" : "#00ff00"} side={THREE.DoubleSide} opacity={0.4} transparent />
           </mesh>
           {/* Fading Walls Extruding Outward */}
           <mesh geometry={selectedData.wallsGeo} material={wallMaterial} />
           
           {/* Hovering Sector ID */}
           <Billboard position={selectedData.center.clone().add(selectedData.normal.clone().multiplyScalar(1.5))}>
-            <Text fontSize={0.25} color="#00ff00" anchorX="center" anchorY="middle" fillOpacity={0.9} depthOffset={-2}>
+            <Text fontSize={0.25} color={isBuildingMode ? "#eab308" : "#00ff00"} anchorX="center" anchorY="middle" fillOpacity={0.9} depthOffset={-2}>
               [{selectedCellId}]
             </Text>
           </Billboard>

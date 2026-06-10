@@ -178,7 +178,7 @@ export function GameEngine() {
       };
 
       // 1. Solar Panels
-      const panels = store.buildings.filter(b => b.type === 'SOLAR_PANEL' && b.status === 'OPERATIONAL');
+      const panels = store.buildings.filter(b => b.type === 'SOLAR_PANEL' && b.status === 'OPERATIONAL' && b.isOn !== false);
       panels.forEach(panel => {
         const center = getFaceCenter(panel.faceIndex);
         if (center) {
@@ -203,7 +203,7 @@ export function GameEngine() {
       });
 
       // 2. Cores consume 1 E/h
-      store.buildings.filter(b => b.type === 'CORE' && b.status === 'OPERATIONAL').forEach(core => {
+      store.buildings.filter(b => b.type === 'CORE' && b.status === 'OPERATIONAL' && b.isOn !== false).forEach(core => {
         const currentCore = getB(core.id);
         const newEnergy = Math.max(0, currentCore.energyStored - (1 * inGameHoursElapsed));
         if (newEnergy !== currentCore.energyStored) updateB(core.id, { energyStored: newEnergy });
@@ -217,11 +217,14 @@ export function GameEngine() {
         liveSinks.forEach(sink => totalSpace += Math.max(0, resourceType === 'water' ? sink.waterMax - sink.waterStored : sink.mineralsMax - sink.mineralsStored));
 
         if (totalSpace <= 0) {
-           if (currentExt.isPowered !== false) updateB(ext.id, { isPowered: false });
+           if (!currentExt.isBlocked) updateB(ext.id, { isBlocked: true });
            return;
+        } else {
+           if (currentExt.isBlocked) updateB(ext.id, { isBlocked: false });
         }
 
-        const energyNeeded = 50 * inGameHoursElapsed;
+        const rate = currentExt.extractionRate ?? 1.0;
+        const energyNeeded = 10 * rate * inGameHoursElapsed;
         const liveSources = findReachable(ext.faceIndex, inGraph, ['BATTERY', 'CORE']).map(s => getB(s.id));
         const totalAvailable = liveSources.reduce((sum, b) => sum + b.energyStored, 0);
         
@@ -232,7 +235,7 @@ export function GameEngine() {
           const center = getFaceCenter(ext.faceIndex);
           if (center) {
             const { lat, lon } = vector3ToCoord(center);
-            const generated = Math.min(10 * (resourceType === 'water' ? getSectorResources(lat, lon).waterMultiplier : getSectorResources(lat, lon).mineralsMultiplier) * inGameHoursElapsed, totalSpace);
+            const generated = Math.min(10 * rate * (resourceType === 'water' ? getSectorResources(lat, lon).waterMultiplier : getSectorResources(lat, lon).mineralsMultiplier) * inGameHoursElapsed, totalSpace);
             if (liveSinks.length > 0) {
                liveSinks.forEach(sink => {
                  const space = Math.max(0, resourceType === 'water' ? sink.waterMax - sink.waterStored : sink.mineralsMax - sink.mineralsStored);
@@ -246,8 +249,8 @@ export function GameEngine() {
         }
       };
 
-      store.buildings.filter(b => b.type === 'ICE_EXTRACTOR' && b.status === 'OPERATIONAL').forEach(ext => processExtractor(ext, 'water'));
-      store.buildings.filter(b => b.type === 'MINERAL_EXTRACTOR' && b.status === 'OPERATIONAL').forEach(ext => processExtractor(ext, 'minerals'));
+      store.buildings.filter(b => b.type === 'ICE_EXTRACTOR' && b.status === 'OPERATIONAL' && b.isOn !== false).forEach(ext => processExtractor(ext, 'water'));
+      store.buildings.filter(b => b.type === 'MINERAL_EXTRACTOR' && b.status === 'OPERATIONAL' && b.isOn !== false).forEach(ext => processExtractor(ext, 'minerals'));
 
       // 4. Network Balancing
       components.forEach(comp => {

@@ -5,6 +5,7 @@ export type BuildingType = 'CORE' | 'SOLAR_PANEL' | 'BATTERY' | 'JUNCTION' | 'IC
 export interface Building {
   id: string;
   type: BuildingType;
+  name?: string;
   faceIndex: number;
   status: 'UNDER_CONSTRUCTION' | 'OPERATIONAL';
   completionTime: number | null; // null if operational or not yet started
@@ -16,6 +17,9 @@ export interface Building {
   mineralsMax: number;
   isPowered?: boolean;
   energyDelta?: number; // Tracks net energy change per in-game hour
+  extractionRate?: number; // 0.0 to 1.0 (default 1.0)
+  isBlocked?: boolean; // True if warehouse is full
+  isOn?: boolean; // True if manually toggled on
 }
 
 export type FlowType = 'BOTH' | 'A_TO_B' | 'B_TO_A' | 'NONE';
@@ -70,10 +74,13 @@ interface GameState {
   connections: Connection[];
   buildMode: BuildMode;
   connectionStartFace: number | null;
+  connectionHistory: number[];
   setBuildMode: (mode: BuildMode) => void;
   setConnectionStartFace: (faceIndex: number | null) => void;
   queueBuildJob: (teamId: string, job: Team['buildJob']) => void;
   completeBuildJob: (teamId: string, buildingId: string) => void;
+  cancelJob: (teamId: string) => void;
+  undoLastConnectionAction: (teamId: string) => boolean;
   
   addBuilding: (building: Building) => void;
   updateBuilding: (id: string, updates: Partial<Building>) => void;
@@ -148,8 +155,17 @@ export const useGameStore = create<GameState>((set) => ({
   connections: [],
   buildMode: 'NONE',
   connectionStartFace: null,
-  setBuildMode: (mode) => set({ buildMode: mode, connectionStartFace: null }),
-  setConnectionStartFace: (faceIndex) => set({ connectionStartFace: faceIndex }),
+  connectionHistory: [],
+  setBuildMode: (mode) => set({ buildMode: mode, connectionStartFace: null, connectionHistory: [] }),
+  setConnectionStartFace: (faceIndex) => set((state) => {
+    if (state.connectionStartFace !== null && faceIndex !== null) {
+      return { connectionHistory: [...state.connectionHistory, state.connectionStartFace], connectionStartFace: faceIndex };
+    } else if (faceIndex === null) {
+      return { connectionStartFace: null, connectionHistory: [] };
+    } else {
+      return { connectionStartFace: faceIndex, connectionHistory: [] };
+    }
+  }),
 
   queueBuildJob: (teamId, job) => set((state) => {
     return {
@@ -201,11 +217,72 @@ export const useGameStore = create<GameState>((set) => ({
     };
   }),
 
-  topologyVersion: 0,
-  addBuilding: (building) => set((state) => ({ 
-    buildings: [...state.buildings, building],
-    topologyVersion: state.topologyVersion + 1
+  cancelJob: (teamId) => set((state) => ({
+    teams: state.teams.map(t => {
+      if (t.id === teamId) {
+        return {
+          ...t,
+          status: t.faceIndex !== null ? 'DEPLOYED' : 'AVAILABLE',
+          targetFaceIndex: null,
+          buildJob: null,
+          jobQueue: [],
+          path: []
+        };
+      }
+      return t;
+    })
   })),
+
+  undoLastConnectionAction: (teamId) => {
+    let undone = false;
+    set((state) => {
+      if (state.connectionHistory.length === 0) return state;
+      const history = [...state.connectionHistory];
+      const targetFace = history.pop()!;
+      
+      const newTeams = state.teams.map(t => {
+        if (t.id === teamId) {
+          const allJobs = [t.buildJob, ...(t.jobQueue || [])].filter(j => j != null) as NonNullable<Team['buildJob']>[];
+          let keepCount = allJobs.length;
+          for (let i = 0; i < allJobs.length; i++) {
+            if (allJobs[i]!.type === 'CONNECTION' && allJobs[i]!.targetFaceIndex === targetFace) {
+               keepCount = i;
+               break;
+            }
+          }
+          
+          const keptJobs = allJobs.slice(0, keepCount);
+          if (keptJobs.length === 0) {
+             return { ...t, status: (t.faceIndex !== null ? 'DEPLOYED' : 'AVAILABLE') as Team['status'], buildJob: null, path: [], targetFaceIndex: null, jobQueue: [] };
+          } else {
+             return { ...t, buildJob: keptJobs[0], jobQueue: keptJobs.slice(1) };
+          }
+        }
+        return t;
+      });
+
+      undone = true;
+      return { teams: newTeams, connectionStartFace: targetFace, connectionHistory: history };
+    });
+    return undone;
+  },
+
+  topologyVersion: 0,
+  addBuilding: (building) => set((state) => {
+    const count = state.buildings.filter(b => b.type === building.type).length + 1;
+    const typeName = building.type.replace('_', ' ');
+    const newBuilding = {
+      ...building,
+      name: `${typeName} #${count}`,
+      extractionRate: 1.0,
+      isOn: true,
+      isBlocked: false
+    };
+    return {
+      buildings: [...state.buildings, newBuilding],
+      topologyVersion: state.topologyVersion + 1
+    };
+  }),
   updateBuilding: (id, updates) => set((state) => ({
     buildings: state.buildings.map(b => b.id === id ? { ...b, ...updates } : b)
   })),
