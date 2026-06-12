@@ -6,11 +6,11 @@ import { useFrame } from '@react-three/fiber';
 
 import { useShallow } from 'zustand/react/shallow';
 
-function BuildingMaterial({ color, isBuilding, isHovered, isDeconstructMode, isPreview }: { color: string, isBuilding?: boolean, isHovered?: boolean, isDeconstructMode?: boolean, isPreview?: boolean }) {
+function BuildingMaterial({ color, isBuilding, isHovered, isDeconstructMode, isPreview, isOff }: { color: string, isBuilding?: boolean, isHovered?: boolean, isDeconstructMode?: boolean, isPreview?: boolean, isOff?: boolean }) {
   const isTargeted = isDeconstructMode && isHovered;
   return (
     <meshBasicMaterial 
-      color={isTargeted ? '#ff0000' : (isPreview ? '#eab308' : (isBuilding ? '#ffff00' : color))} 
+      color={isTargeted ? '#ff0000' : (isOff ? '#880000' : (isPreview ? '#eab308' : (isBuilding ? '#ffff00' : color)))} 
       wireframe={true} 
       transparent={true}
       opacity={isTargeted ? 0.8 : (isPreview ? 0.6 : (isBuilding ? 0.3 : 1))} 
@@ -55,12 +55,24 @@ function useBuildingInteractions(building: { faceIndex: number, status?: string 
   return { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick };
 }
 
+export function useBuildingState(buildingId: string | undefined) {
+  return useGameStore(useShallow(state => {
+    if (!buildingId || buildingId.startsWith('pending-') || buildingId === 'preview') return { isOn: true, isPowered: true, extractionRate: 1, energyLevel: 0 };
+    const b = state.buildings.find(b => b.id === buildingId);
+    if (!b) return { isOn: true, isPowered: true, extractionRate: 1, energyLevel: 0 };
+    return {
+      isOn: b.isOn,
+      isPowered: b.isPowered,
+      extractionRate: b.extractionRate ?? 1,
+      energyLevel: b.energyMax ? b.energyStored / b.energyMax : 0
+    };
+  }));
+}
+
 export default function Buildings({ hoveredFace = null }: { hoveredFace?: number | null }) {
   const buildMode = useGameStore(state => state.buildMode);
 
-  const buildingsData = useGameStore(useShallow(state => 
-    state.buildings.map(b => `${b.id}:${b.type}:${b.faceIndex}:${b.status}:${b.energyMax ? Math.round((b.energyStored / b.energyMax) * 10) / 10 : 0}`)
-  ));
+  const buildingsData = useGameStore(useShallow(state => state.buildings.map(b => `${b.id}:${b.type}:${b.faceIndex}:${b.status}`)));
 
   const connectionsData = useGameStore(useShallow(state => 
     state.connections.map(c => `${c.id}:${c.fromFaceIndex}:${c.toFaceIndex}:${c.flowType}`)
@@ -98,8 +110,7 @@ export default function Buildings({ hoveredFace = null }: { hoveredFace?: number
       id: parts[0], 
       type: parts[1], 
       faceIndex: parseInt(parts[2]), 
-      status: parts[3], 
-      energyLevel: parseFloat(parts[4]) 
+      status: parts[3]
     };
   }), [buildingsData]);
 
@@ -131,6 +142,11 @@ export default function Buildings({ hoveredFace = null }: { hoveredFace?: number
   const mineralExtractors = buildings.filter(b => b.type === 'MINERAL_EXTRACTOR');
   const warehouses = buildings.filter(b => b.type === 'WAREHOUSE');
   const cores = buildings.filter(b => b.type === 'CORE');
+  const spaceports = buildings.filter(b => b.type === 'SPACEPORT');
+  const habitations = buildings.filter(b => b.type === 'HABITATION');
+  const greenhouses = buildings.filter(b => b.type === 'GREENHOUSE');
+  const factories = buildings.filter(b => b.type === 'FACTORY');
+  const oxygenGenerators = buildings.filter(b => b.type === 'OXYGEN_GENERATOR');
 
   // Identify empty relay faces (faces with connections but no buildings)
   const connectedFaces = new Set<number>();
@@ -152,6 +168,11 @@ export default function Buildings({ hoveredFace = null }: { hoveredFace?: number
       {mineralExtractors.map(b => <MineralExtractor key={b.id} building={b as any} gameTime={0} />)}
       {warehouses.map(b => <Warehouse key={b.id} building={b as any} gameTime={0} />)}
       {cores.map(c => <Core key={c.id} building={c as any} gameTime={0} />)}
+      {spaceports.map(b => <Spaceport key={b.id} building={b as any} />)}
+      {habitations.map(b => <Habitation key={b.id} building={b as any} />)}
+      {greenhouses.map(b => <Greenhouse key={b.id} building={b as any} />)}
+      {factories.map(b => <Factory key={b.id} building={b as any} />)}
+      {oxygenGenerators.map(b => <OxygenGenerator key={b.id} building={b as any} />)}
 
       {relayFaces.map(faceIndex => <PowerRelay key={`relay-${faceIndex}`} faceIndex={faceIndex} />)}
 
@@ -169,6 +190,11 @@ export default function Buildings({ hoveredFace = null }: { hoveredFace?: number
           case 'ICE_EXTRACTOR': return <IceExtractor key={`pb-${idx}`} building={previewBuilding} gameTime={0} />;
           case 'MINERAL_EXTRACTOR': return <MineralExtractor key={`pb-${idx}`} building={previewBuilding} gameTime={0} />;
           case 'JUNCTION': return <Junction key={`pb-${idx}`} building={previewBuilding} gameTime={0} />;
+          case 'SPACEPORT': return <Spaceport key={`pb-${idx}`} building={previewBuilding} />;
+          case 'HABITATION': return <Habitation key={`pb-${idx}`} building={previewBuilding} />;
+          case 'GREENHOUSE': return <Greenhouse key={`pb-${idx}`} building={previewBuilding} />;
+          case 'FACTORY': return <Factory key={`pb-${idx}`} building={previewBuilding} />;
+          case 'OXYGEN_GENERATOR': return <OxygenGenerator key={`pb-${idx}`} building={previewBuilding} />;
           default: return null;
         }
       })}
@@ -187,6 +213,11 @@ export default function Buildings({ hoveredFace = null }: { hoveredFace?: number
           case 'ICE_EXTRACTOR': return <IceExtractor key="preview" building={previewBuilding} gameTime={0} />;
           case 'MINERAL_EXTRACTOR': return <MineralExtractor key="preview" building={previewBuilding} gameTime={0} />;
           case 'JUNCTION': return <Junction key="preview" building={previewBuilding} gameTime={0} />;
+          case 'SPACEPORT': return <Spaceport key="preview" building={previewBuilding} />;
+          case 'HABITATION': return <Habitation key="preview" building={previewBuilding} />;
+          case 'GREENHOUSE': return <Greenhouse key="preview" building={previewBuilding} />;
+          case 'FACTORY': return <Factory key="preview" building={previewBuilding} />;
+          case 'OXYGEN_GENERATOR': return <OxygenGenerator key="preview" building={previewBuilding} />;
           default: return null;
         }
       })()}
@@ -236,7 +267,10 @@ function PowerRelay({ faceIndex }: { faceIndex: number }) {
   );
 }
 
-function SolarPanel({ building, gameTime }: { building: any, gameTime: number }) {
+function SolarPanel({ building, gameTime }: { building: Partial<Building> & { faceIndex: number }, gameTime: number }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -245,7 +279,6 @@ function SolarPanel({ building, gameTime }: { building: any, gameTime: number })
   const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
 
   return (
     <group 
@@ -261,12 +294,12 @@ function SolarPanel({ building, gameTime }: { building: any, gameTime: number })
       {/* Base */}
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.02, 0.05, 0.1, 8]} />
-        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
       {/* Panel */}
       <mesh position={[0, 0, 0.05]}>
         <boxGeometry args={[0.4, 0.4, 0.02]} />
-        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
     </group>
   );
@@ -287,7 +320,10 @@ function DeconstructCross() {
   );
 }
 
-function Battery({ building, gameTime }: { building: any, gameTime: number }) {
+function Battery({ building, gameTime }: { building: Partial<Building> & { faceIndex: number, energyLevel?: number }, gameTime: number }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -296,8 +332,7 @@ function Battery({ building, gameTime }: { building: any, gameTime: number }) {
   const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const fillRatio = building.energyLevel;
-  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
+  const fillRatio = energyLevel;
 
   return (
     <group 
@@ -312,21 +347,24 @@ function Battery({ building, gameTime }: { building: any, gameTime: number }) {
       )}
       <mesh>
         <cylinderGeometry args={[0.15, 0.15, 0.2, 16]} />
-        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
       {/* Energy Level Indicator */}
       {!isBuilding && (
         <mesh position={[0, 0.11, 0]}>
           <cylinderGeometry args={[0.1, 0.1, 0.02, 16]} />
           {/* Keep the charge level color-coded so it's readable, but wireframe! */}
-          <BuildingMaterial color={fillRatio > 0.5 ? "#00ff00" : fillRatio > 0.1 ? "#eab308" : "#ef4444"} isBuilding={false} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+          <BuildingMaterial color={fillRatio > 0.5 ? "#00ff00" : fillRatio > 0.1 ? "#eab308" : "#ef4444"} isBuilding={false} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
         </mesh>
       )}
     </group>
   );
 }
 
-function Junction({ building, gameTime }: { building: any, gameTime: number }) {
+function Junction({ building, gameTime }: { building: Partial<Building> & { faceIndex: number }, gameTime: number }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -334,7 +372,6 @@ function Junction({ building, gameTime }: { building: any, gameTime: number }) {
   const pos = center.clone().add(normal.clone().multiplyScalar(0.05));
   
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
 
   return (
     <mesh 
@@ -347,13 +384,16 @@ function Junction({ building, gameTime }: { building: any, gameTime: number }) {
         <DeconstructCross />
       )}
       <octahedronGeometry args={[0.08, 0]} />
-      <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+      <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
     </mesh>
   );
 }
 
 
-function IceExtractor({ building, gameTime }: { building: any, gameTime: number }) {
+function IceExtractor({ building, gameTime }: { building: Partial<Building> & { faceIndex: number }, gameTime: number }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -362,7 +402,6 @@ function IceExtractor({ building, gameTime }: { building: any, gameTime: number 
   const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
   
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
 
   return (
     <group 
@@ -378,18 +417,21 @@ function IceExtractor({ building, gameTime }: { building: any, gameTime: number 
       {/* Drill Body */}
       <mesh position={[0, 0, 0]}>
         <cylinderGeometry args={[0.08, 0.1, 0.25, 8]} />
-        <BuildingMaterial color="#00ffff" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
       {/* Drill Head */}
       <mesh position={[0, -0.15, 0]}>
         <cylinderGeometry args={[0.1, 0.02, 0.1, 8]} />
-        <BuildingMaterial color="#00ffff" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
     </group>
   );
 }
 
-function MineralExtractor({ building, gameTime }: { building: any, gameTime: number }) {
+function MineralExtractor({ building, gameTime }: { building: Partial<Building> & { faceIndex: number }, gameTime: number }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -398,7 +440,6 @@ function MineralExtractor({ building, gameTime }: { building: any, gameTime: num
   const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
   
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
 
   return (
     <group 
@@ -414,27 +455,29 @@ function MineralExtractor({ building, gameTime }: { building: any, gameTime: num
       {/* Excavator Base */}
       <mesh position={[0, 0, 0]}>
         <boxGeometry args={[0.25, 0.15, 0.1]} />
-        <BuildingMaterial color="#ffaa00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
       {/* Arm */}
       <mesh position={[0.15, 0, 0.05]} rotation={[0, 0, Math.PI / 4]}>
         <boxGeometry args={[0.2, 0.05, 0.05]} />
-        <BuildingMaterial color="#ffaa00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
     </group>
   );
 }
 
-function Warehouse({ building, gameTime }: { building: any, gameTime: number }) {
+function Warehouse({ building, gameTime }: { building: Partial<Building> & { faceIndex: number }, gameTime: number }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
   const normal = center.clone().normalize();
-  const pos = center.clone().add(normal.clone().multiplyScalar(0.08));
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+  const pos = center.clone().add(normal.clone().multiplyScalar(0.06));
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
   
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
 
   return (
     <group 
@@ -450,17 +493,20 @@ function Warehouse({ building, gameTime }: { building: any, gameTime: number }) 
       {/* Warehouse Box */}
       <mesh position={[0, 0, 0]}>
         <boxGeometry args={[0.3, 0.2, 0.15]} />
-        <BuildingMaterial color="#0088ff" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
       <mesh position={[0, 0, 0.08]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.1, 0.1, 0.25, 16]} />
-        <BuildingMaterial color="#0088ff" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
     </group>
   );
 }
 
-function Core({ building, gameTime }: { building: any, gameTime: number }) {
+function Core({ building, gameTime }: { building: Partial<Building> & { faceIndex: number }, gameTime: number }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
   const center = getFaceCenter(building.faceIndex);
   if (!center) return null;
 
@@ -468,7 +514,6 @@ function Core({ building, gameTime }: { building: any, gameTime: number }) {
   const pos = center.clone().add(normal.clone().multiplyScalar(0.12));
   
   const isBuilding = building.status === 'UNDER_CONSTRUCTION';
-  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
 
   return (
     <group 
@@ -483,12 +528,12 @@ function Core({ building, gameTime }: { building: any, gameTime: number }) {
       {/* Central Icosahedron */}
       <mesh position={[0, 0, 0]}>
         <icosahedronGeometry args={[0.15, 1]} />
-        <BuildingMaterial color="#0055ff" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
       {/* Inner Core */}
       <mesh position={[0, 0, 0]}>
         <icosahedronGeometry args={[0.08, 0]} />
-        <BuildingMaterial color="#ffffff" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
       </mesh>
     </group>
   );
@@ -547,5 +592,166 @@ function PowerLine({ connection }: { connection: { fromFaceIndex: number, toFace
         opacity={isTargeted ? 1 : 0.6} 
       />
     </mesh>
+  );
+}
+
+function Spaceport({ building }: { building: Partial<Building> & { faceIndex: number } }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
+  const center = getFaceCenter(building.faceIndex);
+  if (!center) return null;
+  const normal = center.clone().normalize();
+  const pos = center.clone().add(normal.clone().multiplyScalar(0.05));
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  const isBuilding = building.status === 'UNDER_CONSTRUCTION';
+
+  return (
+    <group 
+      position={pos} 
+      quaternion={quaternion} 
+      onPointerOver={handlePointerOver} 
+      onPointerOut={handlePointerOut} 
+      onClick={handleClick}
+    >
+      <mesh>
+        <cylinderGeometry args={[0.3, 0.3, 0.05, 16]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+      <mesh position={[0, 0.1, 0]}>
+        <cylinderGeometry args={[0.05, 0.05, 0.2, 8]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+    </group>
+  );
+}
+
+function Habitation({ building }: { building: Partial<Building> & { faceIndex: number } }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
+  const center = getFaceCenter(building.faceIndex);
+  if (!center) return null;
+  const normal = center.clone().normalize();
+  const pos = center.clone().add(normal.clone().multiplyScalar(0.05));
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  const isBuilding = building.status === 'UNDER_CONSTRUCTION';
+
+  return (
+    <group 
+      position={pos} 
+      quaternion={quaternion} 
+      onPointerOver={handlePointerOver} 
+      onPointerOut={handlePointerOut} 
+      onClick={handleClick}
+    >
+      <mesh>
+        <sphereGeometry args={[0.2, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+    </group>
+  );
+}
+
+function Greenhouse({ building }: { building: Partial<Building> & { faceIndex: number } }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
+  const center = getFaceCenter(building.faceIndex);
+  if (!center) return null;
+  const normal = center.clone().normalize();
+  const pos = center.clone().add(normal.clone().multiplyScalar(0.05));
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  const isBuilding = building.status === 'UNDER_CONSTRUCTION';
+
+  return (
+    <group 
+      position={pos} 
+      quaternion={quaternion} 
+      onPointerOver={handlePointerOver} 
+      onPointerOut={handlePointerOut} 
+      onClick={handleClick}
+    >
+      {/* Central Pillar */}
+      <mesh>
+        <cylinderGeometry args={[0.05, 0.05, 0.35, 16]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+      {/* 3 Stacked Disks */}
+      <mesh position={[0, -0.1, 0]}>
+        <cylinderGeometry args={[0.18, 0.18, 0.02, 16]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+      <mesh position={[0, 0.05, 0]}>
+        <cylinderGeometry args={[0.16, 0.16, 0.02, 16]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+      <mesh position={[0, 0.2, 0]}>
+        <cylinderGeometry args={[0.14, 0.14, 0.02, 16]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+    </group>
+  );
+}
+
+function Factory({ building }: { building: Partial<Building> & { faceIndex: number } }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
+  const center = getFaceCenter(building.faceIndex);
+  if (!center) return null;
+  const normal = center.clone().normalize();
+  const pos = center.clone().add(normal.clone().multiplyScalar(0.05));
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  const isBuilding = building.status === 'UNDER_CONSTRUCTION';
+
+  return (
+    <group 
+      position={pos} 
+      quaternion={quaternion} 
+      onPointerOver={handlePointerOver} 
+      onPointerOut={handlePointerOut} 
+      onClick={handleClick}
+    >
+      <mesh>
+        <boxGeometry args={[0.3, 0.2, 0.3]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+      <mesh position={[0.1, 0.2, 0.1]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.2]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+    </group>
+  );
+}
+
+function OxygenGenerator({ building }: { building: Partial<Building> & { faceIndex: number } }) {
+  const { isOn, isPowered, extractionRate, energyLevel } = useBuildingState(building.id);
+  const isOff = isOn === false || isPowered === false || extractionRate === 0;
+  const { isHovered, isDeconstructMode, isPreview, handlePointerOver, handlePointerOut, handleClick } = useBuildingInteractions(building);
+  const center = getFaceCenter(building.faceIndex);
+  if (!center) return null;
+  const normal = center.clone().normalize();
+  const pos = center.clone().add(normal.clone().multiplyScalar(0.05));
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  const isBuilding = building.status === 'UNDER_CONSTRUCTION';
+
+  return (
+    <group 
+      position={pos} 
+      quaternion={quaternion} 
+      onPointerOver={handlePointerOver} 
+      onPointerOut={handlePointerOut} 
+      onClick={handleClick}
+    >
+      <mesh>
+        <cylinderGeometry args={[0.1, 0.15, 0.15, 16]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+      <mesh position={[0, 0.15, 0]}>
+        <sphereGeometry args={[0.12, 16, 16]} />
+        <BuildingMaterial color="#00ff00" isBuilding={isBuilding} isHovered={isHovered} isDeconstructMode={isDeconstructMode} isPreview={isPreview} isOff={isOff} />
+      </mesh>
+    </group>
   );
 }

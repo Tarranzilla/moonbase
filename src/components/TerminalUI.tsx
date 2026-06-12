@@ -9,6 +9,7 @@ import CameraControls from './CameraControls';
 import VisualFilters from './VisualFilters';
 import SearchUI from './SearchUI';
 import { useState, useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 function formatCoords(lat: number, lon: number) {
   const latDir = lat >= 0 ? 'N' : 'S';
@@ -28,21 +29,47 @@ function formatCoords(lat: number, lon: number) {
   return `${latDeg}°${latMin}'${latSec}"${latDir}  ${lonDeg}°${lonMin}'${lonSec}"${lonDir}`;
 }
 
+function TopBar() {
+  const rt = useGameStore(state => state.resourceTotals);
+  const prosperity = useGameStore(state => state.prosperity);
+  return (
+    <div className="flex gap-2 bg-black/60 px-2 py-0.5 border border-green-500/30 flex-wrap">
+      <p className="text-[9px] md:text-xs text-yellow-400">PWR: {Math.floor(rt.power)}/{Math.floor(rt.maxPower)}</p>
+      <p className="text-[9px] md:text-xs text-cyan-400">H2O: {Math.floor(rt.water)}/{Math.floor(rt.maxWater)}</p>
+      <p className="text-[9px] md:text-xs text-orange-400">MIN: {Math.floor(rt.minerals)}/{Math.floor(rt.maxMinerals)}</p>
+      <p className="text-[9px] md:text-xs text-blue-300">O2: {Math.floor(rt.oxygen)}/{Math.floor(rt.maxOxygen)}</p>
+      <p className="text-[9px] md:text-xs text-green-400">FOOD: {Math.floor(rt.food)}/{Math.floor(rt.maxFood)}</p>
+      <p className="text-[9px] md:text-xs text-gray-400">GOODS: {Math.floor(rt.goods)}/{Math.floor(rt.maxGoods)}</p>
+      <p className="text-[9px] md:text-xs text-white">POP: {Math.floor(rt.pop)}/{Math.floor(rt.maxPop)}</p>
+      <p className={`text-[9px] md:text-xs ${prosperity >= 0 ? 'text-green-400' : 'text-red-500 animate-pulse'}`}>
+        PROSPERITY: {Math.floor(prosperity)}
+      </p>
+    </div>
+  );
+}
+
 export default function TerminalUI() {
   const { 
     selectedCellId, 
-    selectedCoordinates, 
+    selectedCoordinates,
     teams, 
-    selectedTeamId, 
+    selectedTeamId,
     setSelectedTeam, 
     deployTeam, 
     moveTeam,
-    buildMode,
     setBuildMode,
-    buildings,
-    connections,
     updateConnection
   } = useGameStore();
+
+  const selectedBuilding = useGameStore(useShallow(state => 
+    selectedCellId ? state.buildings.find(b => b.faceIndex === parseInt(selectedCellId, 10)) : undefined
+  ));
+  
+  const selectedConnections = useGameStore(useShallow(state => 
+    selectedCellId ? state.connections.filter(c => c.fromFaceIndex === parseInt(selectedCellId, 10) || c.toFaceIndex === parseInt(selectedCellId, 10)) : []
+  ));
+
+  const buildMode = useGameStore(state => state.buildMode);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRosterExpanded, setIsRosterExpanded] = useState(false);
@@ -100,12 +127,7 @@ export default function TerminalUI() {
     }
   };
 
-  const totalWater = buildings.reduce((sum, b) => sum + (b.waterStored || 0), 0);
-  const maxWater = buildings.reduce((sum, b) => sum + (b.waterMax || 0), 0);
-  const totalMinerals = buildings.reduce((sum, b) => sum + (b.mineralsStored || 0), 0);
-  const maxMinerals = buildings.reduce((sum, b) => sum + (b.mineralsMax || 0), 0);
-  const totalPower = buildings.reduce((sum, b) => sum + (b.energyStored || 0), 0);
-  const maxPower = buildings.reduce((sum, b) => sum + (b.energyMax || 0), 0);
+
 
   return (
     <div className="absolute inset-0 pointer-events-none p-2 md:p-8 flex flex-col justify-between font-mono text-green-500 z-10 overflow-hidden">
@@ -122,13 +144,9 @@ export default function TerminalUI() {
               <h1 className="text-xl md:text-3xl font-bold tracking-[0.1em] md:tracking-[0.2em] shadow-green-500/50 drop-shadow-md leading-tight md:whitespace-nowrap">
                 MOONBASE COMMAND TERMINAL
               </h1>
-              <div className="flex gap-3 md:gap-6 items-center">
+              <div className="flex flex-col gap-1">
                 <p className="text-[10px] md:text-sm opacity-80">OFFLINE SANDBOX // V0.1.0</p>
-                <div className="flex gap-2 bg-black/60 px-2 py-0.5 border border-green-500/30">
-                  <p className="text-[9px] md:text-xs text-yellow-400">PWR: {Math.floor(totalPower)}/{maxPower}</p>
-                  <p className="text-[9px] md:text-xs text-cyan-400">H2O: {Math.floor(totalWater)}/{maxWater}</p>
-                  <p className="text-[9px] md:text-xs text-orange-400">MIN: {Math.floor(totalMinerals)}/{maxMinerals}</p>
-                </div>
+                <TopBar />
               </div>
             </div>
             
@@ -301,8 +319,8 @@ export default function TerminalUI() {
                         </button>
                       </div>
 
-                      <p className="text-[10px] md:text-xs opacity-70 mt-1 text-cyan-400">RESOURCE EXTRACTION:</p>
-                      <div className="grid grid-cols-2 gap-1 md:gap-2">
+                      <p className="text-[10px] md:text-xs opacity-70 mt-1 text-cyan-400">RESOURCE EXTRACTION & PRODUCTION:</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-1 md:gap-2">
                         <button 
                           onClick={() => setBuildMode('ICE_EXTRACTOR')}
                           className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'ICE_EXTRACTOR' ? 'bg-cyan-500 text-black border-cyan-500' : 'border-cyan-500/50 hover:bg-cyan-900/40 text-cyan-400'}`}
@@ -311,9 +329,43 @@ export default function TerminalUI() {
                         </button>
                         <button 
                           onClick={() => setBuildMode('MINERAL_EXTRACTOR')}
-                          className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'MINERAL_EXTRACTOR' ? 'bg-cyan-500 text-black border-cyan-500' : 'border-cyan-500/50 hover:bg-cyan-900/40 text-cyan-400'}`}
+                          className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'MINERAL_EXTRACTOR' ? 'bg-orange-500 text-black border-orange-500' : 'border-orange-500/50 hover:bg-orange-900/40 text-orange-400'}`}
                         >
                           MINERAL EXCAV
+                        </button>
+                        <button 
+                          onClick={() => setBuildMode('GREENHOUSE')}
+                          className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'GREENHOUSE' ? 'bg-green-400 text-black border-green-400' : 'border-green-400/50 hover:bg-green-900/40 text-green-400'}`}
+                        >
+                          GREENHOUSE
+                        </button>
+                        <button 
+                          onClick={() => setBuildMode('FACTORY')}
+                          className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'FACTORY' ? 'bg-gray-400 text-black border-gray-400' : 'border-gray-400/50 hover:bg-gray-800/40 text-gray-400'}`}
+                        >
+                          FACTORY
+                        </button>
+                        <button 
+                          onClick={() => setBuildMode('OXYGEN_GENERATOR')}
+                          className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'OXYGEN_GENERATOR' ? 'bg-blue-300 text-black border-blue-300' : 'border-blue-300/50 hover:bg-blue-900/40 text-blue-300'}`}
+                        >
+                          O2 GENERATOR
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] md:text-xs opacity-70 mt-1 text-white">POPULATION & LOGISTICS:</p>
+                      <div className="grid grid-cols-2 gap-1 md:gap-2">
+                        <button 
+                          onClick={() => setBuildMode('SPACEPORT')}
+                          className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'SPACEPORT' ? 'bg-purple-500 text-black border-purple-500' : 'border-purple-500/50 hover:bg-purple-900/40 text-purple-400'}`}
+                        >
+                          SPACEPORT
+                        </button>
+                        <button 
+                          onClick={() => setBuildMode('HABITATION')}
+                          className={`py-2 border text-[10px] md:text-xs font-bold transition-colors ${buildMode === 'HABITATION' ? 'bg-white text-black border-white' : 'border-white/50 hover:bg-gray-800/40 text-white'}`}
+                        >
+                          HABITATION
                         </button>
                       </div>
                       <button 
@@ -406,7 +458,7 @@ export default function TerminalUI() {
                 </>
               )}
               {(() => {
-                const building = buildings.find(b => b.faceIndex === parseInt(selectedCellId, 10));
+                const building = selectedBuilding;
                 if (building) {
                   let isIlluminated = false;
                   let solarProduction = 0;
@@ -437,8 +489,8 @@ export default function TerminalUI() {
                         </button>
                       </div>
                       <p>ID: {building.name || building.type}</p>
-                      <p>STATUS: <span className={building.status === 'OPERATIONAL' ? (building.isBlocked ? 'text-yellow-400 font-bold' : 'text-green-400') : 'animate-pulse text-yellow-400'}>
-                        {building.status === 'OPERATIONAL' && building.isBlocked ? 'OFFLINE - WAREHOUSES FULL' : building.status}
+                      <p>STATUS: <span className={building.status === 'OPERATIONAL' ? (building.isOn === false || building.extractionRate === 0 ? 'text-red-500 font-bold' : (building.isBlocked ? 'text-yellow-400 font-bold' : 'text-green-400')) : 'animate-pulse text-yellow-400'}>
+                        {building.status === 'OPERATIONAL' ? (building.isOn === false || building.extractionRate === 0 ? 'OPERATIONAL [POWERED OFF]' : (building.isBlocked ? 'OFFLINE - WAREHOUSES FULL' : building.status)) : building.status}
                       </span></p>
                       {building.type === 'SOLAR_PANEL' && building.status === 'OPERATIONAL' && (
                         <>
@@ -449,10 +501,10 @@ export default function TerminalUI() {
                       {building.type === 'JUNCTION' && building.status === 'OPERATIONAL' && (
                         <div className="mt-2 border-t border-green-500/20 pt-1">
                           <p className="font-bold text-blue-400 mb-1">FLOW CONTROL</p>
-                          {connections.filter(c => c.fromFaceIndex === building.faceIndex || c.toFaceIndex === building.faceIndex).map(c => {
+                          {selectedConnections.map(c => {
                             const isFrom = c.fromFaceIndex === building.faceIndex;
                             const otherId = isFrom ? c.toFaceIndex : c.fromFaceIndex;
-                            const otherBuilding = buildings.find(b => b.faceIndex === otherId);
+                            const otherBuildingType = useGameStore.getState().buildings.find(b => b.faceIndex === otherId)?.type;
                             const flow = c.flowType || 'BOTH';
                             
                             // Determine display text based on flow relative to this junction
@@ -476,7 +528,7 @@ export default function TerminalUI() {
 
                             return (
                               <div key={c.id} className="flex justify-between items-center mb-1">
-                                <span className="truncate pr-2 text-[10px] md:text-xs">Link to {otherBuilding?.type || 'Unknown'}</span>
+                                <span className="truncate pr-2 text-[10px] md:text-xs">Link to {otherBuildingType || 'Unknown'}</span>
                                 <button onClick={toggleFlow} className="px-1 border border-green-500/50 hover:bg-green-900/40 min-w-[70px] text-center text-[9px]">
                                   {displayFlow}
                                 </button>
@@ -498,13 +550,73 @@ export default function TerminalUI() {
                           )}
                         </>
                       )}
-                      {(building.type === 'WAREHOUSE' || building.type === 'CORE') && building.status === 'OPERATIONAL' && (
-                        <>
+                      {building.type === 'CORE' && building.status === 'OPERATIONAL' && (
+                        <div className="mt-2 border-t border-green-500/20 pt-1">
+                          <p className="font-bold text-blue-400 mb-1">CORE STORAGE</p>
                           <p>WATER: {Math.floor(building.waterStored)} / {building.waterMax}</p>
                           <p>MINERALS: {Math.floor(building.mineralsStored)} / {building.mineralsMax}</p>
-                        </>
+                          <p>FOOD: {Math.floor(building.foodStored || 0)} / {building.foodMax || 0}</p>
+                          <p>GOODS: {Math.floor(building.goodsStored || 0)} / {building.goodsMax || 0}</p>
+                          <p>OXYGEN: {Math.floor(building.oxygenStored || 0)} / {building.oxygenMax || 0}</p>
+                        </div>
                       )}
-                      {(building.type === 'ICE_EXTRACTOR' || building.type === 'MINERAL_EXTRACTOR') && building.status === 'OPERATIONAL' && (
+
+                      {building.type === 'WAREHOUSE' && building.status === 'OPERATIONAL' && (() => {
+                        const wWater = building.waterMax || 0;
+                        const wMin = building.mineralsMax || 0;
+                        const wFood = building.foodMax || 0;
+                        const wGoods = building.goodsMax || 0;
+                        const wO2 = building.oxygenMax || 0;
+                        const totalAllocated = wWater + wMin + wFood + wGoods + wO2;
+                        const totalCapacity = 4000;
+                        
+                        const renderSlider = (name: string, maxProp: string, storedProp: string, color: string) => {
+                          const currentMax = (building as any)[maxProp] || 0;
+                          const currentStored = (building as any)[storedProp] || 0;
+                          const sliderMax = Math.max(0, totalCapacity - totalAllocated + currentMax);
+                          
+                          return (
+                            <div className="flex flex-col gap-1 mb-2">
+                              <div className="flex justify-between text-[10px]">
+                                <span className={color}>{name}</span>
+                                <span>{Math.floor(currentStored)} / {currentMax}</span>
+                              </div>
+                              <input 
+                                type="range" 
+                                min="0" 
+                                max={sliderMax} 
+                                step="10" 
+                                value={currentMax}
+                                onChange={(e) => {
+                                  const newVal = parseInt(e.target.value);
+                                  const updates: any = { [maxProp]: newVal };
+                                  if (newVal < currentStored) {
+                                    updates[storedProp] = newVal;
+                                  }
+                                  useGameStore.getState().updateBuilding(building.id, updates);
+                                }}
+                                className="w-full accent-green-500 cursor-pointer h-1"
+                              />
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <div className="mt-2 border-t border-green-500/20 pt-1">
+                            <div className="flex justify-between items-center mb-1">
+                              <p className="font-bold text-blue-400">STORAGE ALLOCATION</p>
+                              <p className="text-xs font-bold text-gray-300">STRG: {totalAllocated}/{totalCapacity}</p>
+                            </div>
+                            {renderSlider('WATER', 'waterMax', 'waterStored', 'text-cyan-400')}
+                            {renderSlider('MINERALS', 'mineralsMax', 'mineralsStored', 'text-orange-400')}
+                            {renderSlider('FOOD', 'foodMax', 'foodStored', 'text-green-400')}
+                            {renderSlider('GOODS', 'goodsMax', 'goodsStored', 'text-gray-400')}
+                            {renderSlider('OXYGEN', 'oxygenMax', 'oxygenStored', 'text-blue-300')}
+                          </div>
+                        );
+                      })()}
+
+                      {(['ICE_EXTRACTOR', 'MINERAL_EXTRACTOR', 'GREENHOUSE', 'FACTORY', 'OXYGEN_GENERATOR'].includes(building.type)) && building.status === 'OPERATIONAL' && (
                         <>
                           <div className="flex items-center gap-2 mt-2 mb-1">
                             <span>INTENSITY:</span>
@@ -517,25 +629,71 @@ export default function TerminalUI() {
                             />
                             <span>{Math.round((building.extractionRate ?? 1.0) * 100)}%</span>
                           </div>
-                          <p>POWER: <span className={building.isPowered ? 'text-green-400 font-bold' : 'text-red-500 font-bold animate-pulse'}>{building.isPowered ? '[POWERED]' : '[NO POWER]'}</span></p>
-                          <p>CONSUMPTION: -{Math.round(10 * (building.extractionRate ?? 1.0))} E/h</p>
+                          <p>POWER: <span className={building.isOn === false || building.extractionRate === 0 ? 'text-red-500 font-bold' : (building.isPowered ? 'text-green-400 font-bold' : 'text-red-500 font-bold animate-pulse')}>{building.isOn === false || building.extractionRate === 0 ? '[OFF]' : (building.isPowered ? '[POWERED]' : '[NO POWER]')}</span></p>
                           {(() => {
-                            let prodRate = 0;
-                            if (building.faceIndex !== null) {
-                              const center = getFaceCenter(building.faceIndex);
-                              if (center) {
-                                const { lat, lon } = vector3ToCoord(center);
-                                const res = getSectorResources(lat, lon);
-                                const mult = building.type === 'ICE_EXTRACTOR' ? res.waterMultiplier : res.mineralsMultiplier;
-                                prodRate = 10 * (building.extractionRate ?? 1.0) * mult;
+                            const rate = building.extractionRate ?? 1.0;
+                            let energyC = 0, waterC = 0, mineralsC = 0;
+                            let prodRate = 0, prodType = '', prodColor = '';
+                            
+                            if (building.type === 'ICE_EXTRACTOR' || building.type === 'MINERAL_EXTRACTOR') {
+                              energyC = 10 * rate;
+                              let mult = 1;
+                              if (building.faceIndex !== null) {
+                                const center = getFaceCenter(building.faceIndex);
+                                if (center) {
+                                  const { lat, lon } = vector3ToCoord(center);
+                                  const res = getSectorResources(lat, lon);
+                                  mult = building.type === 'ICE_EXTRACTOR' ? res.waterMultiplier : res.mineralsMultiplier;
+                                }
                               }
+                              prodRate = 10 * rate * mult;
+                              prodType = building.type === 'ICE_EXTRACTOR' ? 'WATER' : 'MINERALS';
+                              prodColor = building.type === 'ICE_EXTRACTOR' ? 'text-cyan-400' : 'text-orange-400';
+                            } else if (building.type === 'GREENHOUSE') {
+                              energyC = 5 * rate; waterC = 2 * rate;
+                              prodRate = 10 * rate; prodType = 'FOOD'; prodColor = 'text-green-400';
+                            } else if (building.type === 'FACTORY') {
+                              energyC = 15 * rate; waterC = 1 * rate; mineralsC = 5 * rate;
+                              prodRate = 5 * rate; prodType = 'GOODS'; prodColor = 'text-gray-400';
+                            } else if (building.type === 'OXYGEN_GENERATOR') {
+                              energyC = 10 * rate; waterC = 5 * rate;
+                              prodRate = 20 * rate; prodType = 'OXYGEN'; prodColor = 'text-blue-300';
                             }
+
                             return (
-                              <p>PRODUCTION: <span className="text-cyan-400 font-bold">+{prodRate.toFixed(1)} {building.type === 'ICE_EXTRACTOR' ? 'WATER' : 'MINERALS'}/h</span></p>
+                              <div className="mt-2 border-t border-green-500/20 pt-1">
+                                <p className="font-bold text-blue-400 mb-1">LOGISTICS</p>
+                                <p>CONSUMPTION:</p>
+                                <ul className="pl-4 text-[10px] md:text-xs text-red-400">
+                                  {energyC > 0 && <li>-{energyC.toFixed(1)} E/h</li>}
+                                  {waterC > 0 && <li>-{waterC.toFixed(1)} WATER/h</li>}
+                                  {mineralsC > 0 && <li>-{mineralsC.toFixed(1)} MINERALS/h</li>}
+                                </ul>
+                                <p>PRODUCTION: <span className={`${prodColor} font-bold`}>+{prodRate.toFixed(1)} {prodType}/h</span></p>
+                              </div>
                             );
                           })()}
                         </>
                       )}
+                      
+                      {building.type === 'HABITATION' && building.status === 'OPERATIONAL' && (() => {
+                        const pop = building.population || 0;
+                        const popMax = building.populationMax || 20;
+                        const consRate = pop * 0.1;
+                        return (
+                          <div className="mt-2 border-t border-green-500/20 pt-1">
+                            <p className="font-bold text-blue-400 mb-1">HABITATION LOGISTICS</p>
+                            <p>POPULATION: <span className="text-white font-bold">{pop} / {popMax}</span></p>
+                            <p>CONSUMPTION:</p>
+                            <ul className="pl-4 text-[10px] md:text-xs text-red-400">
+                              <li>-{consRate.toFixed(1)} WATER/h</li>
+                              <li>-{consRate.toFixed(1)} FOOD/h</li>
+                              <li>-{consRate.toFixed(1)} GOODS/h</li>
+                              <li>-{consRate.toFixed(1)} OXYGEN/h</li>
+                            </ul>
+                          </div>
+                        );
+                      })()}
 
                     </div>
                   );

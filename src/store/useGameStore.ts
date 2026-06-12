@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type BuildingType = 'CORE' | 'SOLAR_PANEL' | 'BATTERY' | 'JUNCTION' | 'ICE_EXTRACTOR' | 'MINERAL_EXTRACTOR' | 'WAREHOUSE';
+export type BuildingType = 'CORE' | 'SOLAR_PANEL' | 'BATTERY' | 'JUNCTION' | 'ICE_EXTRACTOR' | 'MINERAL_EXTRACTOR' | 'WAREHOUSE' | 'SPACEPORT' | 'HABITATION' | 'GREENHOUSE' | 'FACTORY' | 'OXYGEN_GENERATOR';
 
 export interface Building {
   id: string;
@@ -15,6 +15,14 @@ export interface Building {
   waterMax: number;
   mineralsStored: number;
   mineralsMax: number;
+  foodStored?: number;
+  foodMax?: number;
+  goodsStored?: number;
+  goodsMax?: number;
+  oxygenStored?: number;
+  oxygenMax?: number;
+  population?: number;
+  populationMax?: number;
   isPowered?: boolean;
   energyDelta?: number; // Tracks net energy change per in-game hour
   extractionRate?: number; // 0.0 to 1.0 (default 1.0)
@@ -112,6 +120,22 @@ interface GameState {
     name: string;
   } | null;
   focusTarget: (target: GameState['cameraTarget']) => void;
+
+  prosperity: number;
+  setProsperity: (val: number | ((prev: number) => number)) => void;
+  nextShipArrivalTime: number | null;
+  setNextShipArrivalTime: (val: number | null) => void;
+
+  resourceTotals: {
+    water: number; maxWater: number;
+    minerals: number; maxMinerals: number;
+    power: number; maxPower: number;
+    food: number; maxFood: number;
+    goods: number; maxGoods: number;
+    oxygen: number; maxOxygen: number;
+    pop: number; maxPop: number;
+  };
+  setResourceTotals: (totals: Partial<GameState['resourceTotals']>) => void;
 }
 
 // Start at year 2142, Jan 1st
@@ -150,6 +174,24 @@ export const useGameStore = create<GameState>((set) => ({
       autoRotate: target ? false : useGameStore.getState().autoRotate
     });
   },
+
+  prosperity: 0,
+  setProsperity: (val) => set((state) => ({
+    prosperity: typeof val === 'function' ? val(state.prosperity) : val
+  })),
+  nextShipArrivalTime: null,
+  setNextShipArrivalTime: (val) => set({ nextShipArrivalTime: val }),
+
+  resourceTotals: {
+    water: 0, maxWater: 0,
+    minerals: 0, maxMinerals: 0,
+    power: 0, maxPower: 0,
+    food: 0, maxFood: 0,
+    goods: 0, maxGoods: 0,
+    oxygen: 0, maxOxygen: 0,
+    pop: 0, maxPop: 0,
+  },
+  setResourceTotals: (totals) => set((state) => ({ resourceTotals: { ...state.resourceTotals, ...totals } })),
 
   buildings: [],
   connections: [],
