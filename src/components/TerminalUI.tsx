@@ -58,7 +58,13 @@ export default function TerminalUI() {
     deployTeam, 
     moveTeam,
     setBuildMode,
-    updateConnection
+    updateConnection,
+    spaceships,
+    savedLayouts,
+    saveLayout,
+    loadLayout,
+    deleteLayout,
+    renameLayout
   } = useGameStore();
 
   const selectedBuilding = useGameStore(useShallow(state => 
@@ -74,6 +80,10 @@ export default function TerminalUI() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRosterExpanded, setIsRosterExpanded] = useState(false);
   const [isQueueExpanded, setIsQueueExpanded] = useState(true);
+
+  const [newLayoutName, setNewLayoutName] = useState('');
+  const [editingLayoutId, setEditingLayoutId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -114,7 +124,7 @@ export default function TerminalUI() {
   }, [setBuildMode]);
 
   const selectedTeam = teams.find(t => t.id === selectedTeamId);
-
+  const selectedSpaceship = spaceships.find(s => s.id === selectedTeamId);
   const handleDeploy = () => {
     if (selectedTeamId && selectedCellId) {
       deployTeam(selectedTeamId, parseInt(selectedCellId, 10));
@@ -150,9 +160,9 @@ export default function TerminalUI() {
               </div>
             </div>
             
-            {/* Mobile Settings Button */}
+            {/* Settings Button */}
             <button 
-              className="md:hidden pointer-events-auto border border-green-500/50 text-green-500 bg-black/60 px-2 py-1 text-[10px] hover:bg-green-500/20"
+              className="pointer-events-auto border border-green-500/50 text-green-500 bg-black/60 px-2 md:px-4 py-1 md:py-2 text-[10px] md:text-xs font-bold hover:bg-green-500/20"
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
             >
               {isSettingsOpen ? '[X] CFG' : '[+] CFG'}
@@ -178,11 +188,86 @@ export default function TerminalUI() {
 
       </div>
 
-      {/* Mobile Settings Modal */}
+      {/* Settings Modal (Mobile & Desktop) */}
       {isSettingsOpen && (
-        <div className="md:hidden absolute top-20 right-2 pointer-events-auto flex flex-col gap-2 items-end z-30">
-          <CameraControls />
-          <VisualFilters />
+        <div className="absolute top-20 right-2 md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 pointer-events-auto flex flex-col gap-2 z-50 bg-black/90 border border-green-500/50 p-4 shadow-[0_0_20px_rgba(0,255,0,0.2)] backdrop-blur-md w-[90vw] md:w-[600px] max-w-[90vw] md:max-w-none max-h-[70vh] md:max-h-[85vh] overflow-y-auto terminal-scrollbar">
+          <div className="flex justify-between items-center border-b border-green-500/30 pb-2 mb-2">
+            <h2 className="font-bold text-green-400">CONFIGURATION</h2>
+            <button onClick={() => setIsSettingsOpen(false)} className="text-red-500 hover:text-red-400">[X]</button>
+          </div>
+          
+          <div className="md:hidden flex flex-col gap-2 mb-4 border-b border-green-500/30 pb-4">
+            <p className="text-xs text-gray-400 mb-1">DISPLAY CONTROLS</p>
+            <CameraControls />
+            <div className="mt-2" />
+            <VisualFilters />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-blue-400 mb-1 font-bold">BASE LAYOUTS</p>
+            <div className="flex gap-2 mb-2">
+              <input 
+                type="text" 
+                value={newLayoutName} 
+                onChange={(e) => setNewLayoutName(e.target.value)} 
+                placeholder="New Layout Name..."
+                className="flex-1 bg-black/50 border border-green-500/50 p-1 text-[10px] md:text-xs text-green-400 outline-none focus:border-green-400"
+              />
+              <button 
+                onClick={() => { if (newLayoutName.trim()) { saveLayout(newLayoutName.trim()); setNewLayoutName(''); } }}
+                className="px-2 py-1 bg-blue-900/50 border border-blue-500 text-blue-300 text-[10px] md:text-xs hover:bg-blue-800"
+              >
+                SAVE
+              </button>
+            </div>
+            
+            {savedLayouts.length === 0 ? (
+              <p className="text-[10px] md:text-xs text-gray-500 italic">No saved layouts.</p>
+            ) : (
+              <ul className="space-y-2">
+                {savedLayouts.map(layout => (
+                  <li key={layout.id} className="border border-green-500/20 p-2 bg-green-900/10 flex flex-col gap-1">
+                    <div className="flex justify-between items-center">
+                      {editingLayoutId === layout.id ? (
+                        <input 
+                          autoFocus
+                          type="text" 
+                          value={editName} 
+                          onChange={e => setEditName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && editName.trim()) {
+                              renameLayout(layout.id, editName.trim());
+                              setEditingLayoutId(null);
+                            }
+                          }}
+                          className="bg-black/50 border border-green-400 text-green-400 text-[10px] md:text-xs px-1 outline-none w-1/2"
+                        />
+                      ) : (
+                        <span className="text-[10px] md:text-xs font-bold text-green-300 truncate pr-2">{layout.name}</span>
+                      )}
+                      
+                      <span className="text-[8px] md:text-[10px] text-gray-500">{new Date(layout.timestamp).toLocaleString()}</span>
+                    </div>
+                    
+                    <div className="flex gap-1 justify-end mt-1">
+                      {editingLayoutId === layout.id ? (
+                        <>
+                          <button onClick={() => { if (editName.trim()) renameLayout(layout.id, editName.trim()); setEditingLayoutId(null); }} className="px-2 py-0.5 border border-green-500 text-green-400 text-[9px] hover:bg-green-900/50">SAVE</button>
+                          <button onClick={() => setEditingLayoutId(null)} className="px-2 py-0.5 border border-gray-500 text-gray-400 text-[9px] hover:bg-gray-800">CANCEL</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => loadLayout(layout.id)} className="px-2 py-0.5 border border-cyan-500 text-cyan-400 text-[9px] hover:bg-cyan-900/50 flex-1">LOAD</button>
+                          <button onClick={() => { setEditingLayoutId(layout.id); setEditName(layout.name); }} className="px-2 py-0.5 border border-yellow-500 text-yellow-400 text-[9px] hover:bg-yellow-900/50">RENAME</button>
+                          <button onClick={() => deleteLayout(layout.id)} className="px-2 py-0.5 border border-red-500 text-red-400 text-[9px] hover:bg-red-900/50">DELETE</button>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
@@ -427,6 +512,33 @@ export default function TerminalUI() {
                     <span>[{job.targetFaceIndex}]</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Spaceship Status Panel */}
+          {selectedSpaceship && (
+            <div className="pointer-events-auto border border-cyan-500/50 bg-black/60 p-2 md:p-4 backdrop-blur-sm shadow-[0_0_15px_rgba(0,255,255,0.1)] flex-shrink-0 flex flex-col min-h-0 mb-2">
+              <h2 className="mb-1 md:mb-2 text-sm md:text-base font-bold border-b border-cyan-500/30 pb-1 text-cyan-400">
+                SPACESHIP STATUS: STS {selectedSpaceship.id.split('-')[1] || selectedSpaceship.id}
+              </h2>
+              <div className="space-y-1 text-xs md:text-sm">
+                <p>STATE: <span className="font-bold text-cyan-300">{selectedSpaceship.status.replace(/_/g, ' ')}</span></p>
+                {selectedSpaceship.status !== 'DOCKED' && (
+                  <p>PROGRESS: {Math.floor(selectedSpaceship.progress * 100)}%</p>
+                )}
+                <p>TARGET PORT: [{selectedSpaceship.targetFaceIndex}]</p>
+                <div className="mt-2 border-t border-cyan-500/30 pt-1">
+                  <p className="text-[10px] md:text-xs text-cyan-500 mb-1">MANIFEST:</p>
+                  <div className="grid grid-cols-2 gap-x-2 text-[10px] md:text-xs">
+                    <p>POP: {selectedSpaceship.cargo.population}</p>
+                    <p>H2O: {selectedSpaceship.cargo.water}</p>
+                    <p>FOOD: {selectedSpaceship.cargo.food}</p>
+                    <p>O2: {selectedSpaceship.cargo.oxygen}</p>
+                    <p>GOODS: {selectedSpaceship.cargo.goods}</p>
+                    <p>MIN: {selectedSpaceship.cargo.minerals}</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -691,6 +803,35 @@ export default function TerminalUI() {
                               <li>-{consRate.toFixed(1)} GOODS/h</li>
                               <li>-{consRate.toFixed(1)} OXYGEN/h</li>
                             </ul>
+                          </div>
+                        );
+                      })()}
+
+                      {building.type === 'SPACEPORT' && building.status === 'OPERATIONAL' && (() => {
+                        const incomingShips = useGameStore.getState().spaceships.filter(s => s.targetFaceIndex === building.faceIndex);
+                        return (
+                          <div className="mt-2 border-t border-green-500/20 pt-1">
+                            <p className="font-bold text-purple-400 mb-1">SPACEPORT ANALYTICS</p>
+                            <p>POWER: <span className={building.isPowered ? 'text-green-400 font-bold' : 'text-red-500 font-bold animate-pulse'}>{building.isPowered ? '[POWERED]' : '[NO POWER]'}</span></p>
+                            <p>CONSUMPTION: <span className="text-red-400 font-bold">-2 E/h</span></p>
+                            <p>BEACON STATUS: {building.isPowered ? <span className="text-purple-400 font-bold">TRANSMITTING (+0.5 PROSPERITY/h)</span> : <span className="text-gray-500">OFFLINE</span>}</p>
+                            <div className="mt-2 border-t border-green-500/10 pt-1">
+                              <p className="font-bold text-blue-300 text-[10px] md:text-xs mb-1">LOGISTICS SCHEDULE:</p>
+                              {incomingShips.length === 0 ? (
+                                <p className="text-gray-500 text-[9px] md:text-xs">NO SCHEDULED ARRIVALS</p>
+                              ) : (
+                                <ul className="space-y-1">
+                                  {incomingShips.map(ship => (
+                                    <li key={ship.id} className="text-[9px] md:text-xs flex justify-between border-b border-green-500/10 pb-0.5">
+                                      <span className="text-cyan-300 truncate pr-1">STS {ship.id.split('-')[1] || ship.id}</span>
+                                      <span className={ship.status === 'DOCKED' ? 'text-green-400 font-bold' : 'text-yellow-400'}>
+                                        {ship.status === 'DOCKED' ? 'DOCKED' : `ETA: ${Math.round((1 - ship.progress) * 100)}%`}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
                           </div>
                         );
                       })()}

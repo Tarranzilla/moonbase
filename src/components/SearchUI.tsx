@@ -5,6 +5,7 @@ import { useGameStore } from '@/store/useGameStore';
 import { LUNAR_CRATERS } from '@/data/craters';
 import { LUNAR_MARES } from '@/data/mares';
 import { getFaceCenter, SIM_MOON_RADIUS, coordToVector3 } from '@/utils/geo';
+import * as THREE from 'three';
 
 export default function SearchUI() {
   const [query, setQuery] = useState('');
@@ -104,6 +105,35 @@ export default function SearchUI() {
             const pos = getFaceCenter(b.faceIndex, SIM_MOON_RADIUS);
             if (pos) {
               focusTarget({ type: 'ENTITY', id: b.id, pos, name: `STRUCTURE: ${b.type}` });
+            }
+          }
+        });
+      }
+    });
+
+    // 5.5 Spaceships
+    useGameStore.getState().spaceships.forEach((s) => {
+      const shipName = `sts ${s.id.split('-')[1] || s.id}`.toLowerCase();
+      if ('spaceship'.includes(q) || s.id.toLowerCase().includes(q) || shipName.includes(q)) {
+        results.push({
+          id: s.id,
+          type: 'SPACESHIP',
+          name: `STS ${s.id.split('-')[1] || s.id}`,
+          onSelect: () => {
+            useGameStore.getState().setSelectedTeam(s.id); // Re-use selection so the sidebar panel opens
+            // To focus, we need its current 3D position. But since it moves, static focus might be tricky.
+            // For now we just focus "Earth" or "Moon" depending on status, or let the user see the panel.
+            if (s.status === 'EN_ROUTE_TO_MOON' || s.status === 'EN_ROUTE_TO_EARTH') {
+               const p0 = new THREE.Vector3(-400, 0, 0);
+               const p2 = getFaceCenter(s.targetFaceIndex, 10)!.multiplyScalar(1.05);
+               const p1 = new THREE.Vector3().addVectors(p0, p2).multiplyScalar(0.5).add(new THREE.Vector3(0,1,0).multiplyScalar(100));
+               const curve = new THREE.QuadraticBezierCurve3(p0, p1, p2);
+               const t = s.status === 'EN_ROUTE_TO_EARTH' ? 1 - s.progress : s.progress;
+               const pos = curve.getPointAt(t);
+               focusTarget({ type: 'ENTITY', id: s.id, pos, name: `STS ${s.id.split('-')[1] || s.id}` });
+            } else {
+               const pos = getFaceCenter(s.targetFaceIndex, SIM_MOON_RADIUS);
+               focusTarget({ type: 'ENTITY', id: s.id, pos: pos || new THREE.Vector3(0,0,0), name: `STS ${s.id.split('-')[1] || s.id}` });
             }
           }
         });

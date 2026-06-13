@@ -11,6 +11,7 @@ import Mares from './Mares';
 import { LUNAR_CRATERS } from '@/data/craters';
 import { LUNAR_MARES } from '@/data/mares';
 import Buildings from './Buildings';
+import Spaceships from './Spaceships';
 import { findShortestPath, getFaceCenter } from '@/utils/geo';
 
 const sunShader = {
@@ -506,6 +507,7 @@ export default function Moon() {
   return (
     <group>
       <Buildings hoveredFace={hoveredFace} />
+      <Spaceships />
       {/* Main Moon Mesh */}
       <mesh
         geometry={geometry}

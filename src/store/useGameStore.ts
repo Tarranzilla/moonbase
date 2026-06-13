@@ -63,7 +63,30 @@ export interface Team {
   }>;
 }
 
+export interface Spaceship {
+  id: string;
+  status: 'EN_ROUTE_TO_MOON' | 'DOCKED' | 'EN_ROUTE_TO_EARTH';
+  progress: number;
+  targetFaceIndex: number; // The spaceport face index
+  cargo: {
+    population: number;
+    water: number;
+    food: number;
+    goods: number;
+    oxygen: number;
+    minerals: number;
+  };
+}
+
 export type BuildMode = 'NONE' | BuildingType | 'CONNECTION' | 'DECONSTRUCT' | 'DECONSTRUCT_CONNECTION';
+
+export interface SavedLayout {
+  id: string;
+  name: string;
+  timestamp: number;
+  buildings: Building[];
+  connections: Connection[];
+}
 
 interface GameState {
   selectedCellId: string | null;
@@ -99,6 +122,11 @@ interface GameState {
   removeConnection: (id: string) => void;
   topologyVersion: number;
 
+  spaceships: Spaceship[];
+  addSpaceship: (ship: Spaceship) => void;
+  updateSpaceship: (id: string, updates: Partial<Spaceship>) => void;
+  removeSpaceship: (id: string) => void;
+
   timeScale: number;
   setTimeScale: (scale: number) => void;
   gameTime: number;
@@ -110,6 +138,7 @@ interface GameState {
     showCraters: boolean;
     showEquator: boolean;
     showMares: boolean;
+    showTrajectories: boolean;
   };
   toggleFilter: (filterName: keyof GameState['filters']) => void;
 
@@ -136,6 +165,12 @@ interface GameState {
     pop: number; maxPop: number;
   };
   setResourceTotals: (totals: Partial<GameState['resourceTotals']>) => void;
+
+  savedLayouts: SavedLayout[];
+  saveLayout: (name: string) => void;
+  loadLayout: (id: string) => void;
+  deleteLayout: (id: string) => void;
+  renameLayout: (id: string, newName: string) => void;
 }
 
 // Start at year 2142, Jan 1st
@@ -159,6 +194,7 @@ export const useGameStore = create<GameState>((set) => ({
     showCraters: true,
     showEquator: true,
     showMares: true,
+    showTrajectories: false,
   },
   toggleFilter: (filterName) => set((state) => ({
     filters: {
@@ -192,6 +228,15 @@ export const useGameStore = create<GameState>((set) => ({
     pop: 0, maxPop: 0,
   },
   setResourceTotals: (totals) => set((state) => ({ resourceTotals: { ...state.resourceTotals, ...totals } })),
+
+  spaceships: [],
+  addSpaceship: (ship) => set((state) => ({ spaceships: [...state.spaceships, ship] })),
+  updateSpaceship: (id, updates) => set((state) => ({
+    spaceships: state.spaceships.map(s => s.id === id ? { ...s, ...updates } : s)
+  })),
+  removeSpaceship: (id) => set((state) => ({
+    spaceships: state.spaceships.filter(s => s.id !== id)
+  })),
 
   buildings: [],
   connections: [],
@@ -396,4 +441,61 @@ export const useGameStore = create<GameState>((set) => ({
         : t
     )
   })),
+
+  savedLayouts: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('moonbase-layouts') || '[]') : [],
+  saveLayout: (name) => set((state) => {
+    const newLayout: SavedLayout = {
+      id: `layout-${Date.now()}`,
+      name,
+      timestamp: Date.now(),
+      buildings: JSON.parse(JSON.stringify(state.buildings)),
+      connections: JSON.parse(JSON.stringify(state.connections))
+    };
+    const updatedLayouts = [...state.savedLayouts, newLayout];
+    if (typeof window !== 'undefined') localStorage.setItem('moonbase-layouts', JSON.stringify(updatedLayouts));
+    return { savedLayouts: updatedLayouts };
+  }),
+  loadLayout: (id) => set((state) => {
+    const layout = state.savedLayouts.find(l => l.id === id);
+    if (!layout) return state;
+    // Reset spaceships, teams, topology
+    return {
+      buildings: JSON.parse(JSON.stringify(layout.buildings)),
+      connections: JSON.parse(JSON.stringify(layout.connections)),
+      spaceships: [],
+      teams: state.teams.map(t => ({ ...t, status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0, buildJob: null, jobQueue: [] })),
+      topologyVersion: state.topologyVersion + 1,
+      selectedCellId: null,
+      selectedCoordinates: null,
+      selectedTeamId: null,
+      buildMode: 'NONE'
+    };
+  }),
+  deleteLayout: (id) => set((state) => {
+    const updatedLayouts = state.savedLayouts.filter(l => l.id !== id);
+    if (typeof window !== 'undefined') localStorage.setItem('moonbase-layouts', JSON.stringify(updatedLayouts));
+    return { savedLayouts: updatedLayouts };
+  }),
+  renameLayout: (id, newName) => set((state) => {
+    const updatedLayouts = state.savedLayouts.map(l => l.id === id ? { ...l, name: newName } : l);
+    if (typeof window !== 'undefined') localStorage.setItem('moonbase-layouts', JSON.stringify(updatedLayouts));
+    return { savedLayouts: updatedLayouts };
+  }),
+
 }));
+
+// Patch existing Habitations on initialization
+useGameStore.subscribe((state) => {
+  if (state.buildings.length > 0) {
+    const needsPatch = state.buildings.some(b => b.type === 'HABITATION' && (!b.populationMax || b.populationMax === 0));
+    if (needsPatch) {
+      useGameStore.setState({
+        buildings: state.buildings.map(b => 
+          b.type === 'HABITATION' && (!b.populationMax || b.populationMax === 0)
+            ? { ...b, populationMax: 20 }
+            : b
+        )
+      });
+    }
+  }
+});

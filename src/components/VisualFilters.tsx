@@ -45,6 +45,18 @@ export default function VisualFilters() {
           <span>LUNAR SEAS (MARES)</span>
           <span>{filters.showMares ? '[ON]' : '[OFF]'}</span>
         </button>
+
+        <button 
+          onClick={() => toggleFilter('showTrajectories')}
+          className={`w-full py-1 px-2 border transition-colors flex justify-between items-center ${
+            filters.showTrajectories 
+              ? 'bg-purple-500/20 border-purple-500 text-purple-400' 
+              : 'border-purple-500/30 text-purple-500/50 hover:border-purple-500/50 hover:text-purple-500'
+          }`}
+        >
+          <span>SHIP TRAJECTORIES</span>
+          <span>{filters.showTrajectories ? '[ON]' : '[OFF]'}</span>
+        </button>
       </div>
     </div>
   );

@@ -212,52 +212,111 @@ export function GameEngine() {
         const spaceports = store.buildings.filter(b => b.type === 'SPACEPORT' && b.status === 'OPERATIONAL');
         
         if (spaceports.length > 0) {
-          const connectedHabitations = new Set<Building>();
-          spaceports.forEach(sp => {
-            findReachable(sp.faceIndex, bothGraph, ['HABITATION'], 'both').forEach(hab => connectedHabitations.add(hab));
-          });
-          const hList = Array.from(connectedHabitations);
-          
-          if (prosperity <= -20) {
-            hList.sort((a, b) => (getB(b.id).population || 0) - (getB(a.id).population || 0));
-            hList.forEach(hab => {
-              const currentHab = getB(hab.id);
-              if (removedCount < 20 && currentHab.population && currentHab.population > 0) {
-                const toRemove = Math.min(20 - removedCount, currentHab.population);
-                updateB(hab.id, { population: currentHab.population - toRemove });
-                removedCount += toRemove;
-              }
-            });
-            store.setProsperity(prosperity + 20);
-          } else if (prosperity >= 20) {
-            hList.forEach(hab => {
-              const currentHab = getB(hab.id);
-              const space = (currentHab.populationMax || 20) - (currentHab.population || 0);
-              if (space > 0 && addedCount < 20) {
-                const toAdd = Math.min(space, 20 - addedCount);
-                updateB(hab.id, { population: (currentHab.population || 0) + toAdd });
-                addedCount += toAdd;
-              }
-            });
-            store.setProsperity(prosperity - 20);
-            
-            const connectedWarehouses = new Set<Building>();
-            spaceports.forEach(sp => {
-              findReachable(sp.faceIndex, bothGraph, ['WAREHOUSE'], 'both').forEach(wh => connectedWarehouses.add(wh));
-            });
-            Array.from(connectedWarehouses).forEach(wh => {
-              const currentWh = getB(wh.id);
-              updateB(wh.id, { 
-                waterStored: Math.min(currentWh.waterMax ?? 0, (currentWh.waterStored ?? 0) + 20),
-                foodStored: Math.min(currentWh.foodMax ?? 0, (currentWh.foodStored ?? 0) + 20),
-                goodsStored: Math.min(currentWh.goodsMax ?? 0, (currentWh.goodsStored ?? 0) + 20),
-                oxygenStored: Math.min(currentWh.oxygenMax ?? 0, (currentWh.oxygenStored ?? 0) + 20)
+          spaceports.forEach(port => {
+            // Check if this spaceport has an assigned ship anywhere in the cycle
+            if (!store.spaceships.some(s => s.targetFaceIndex === port.faceIndex)) {
+              store.addSpaceship({
+                 id: `ship-${Date.now()}-${port.faceIndex}`,
+                 status: 'EN_ROUTE_TO_MOON',
+                 progress: 0,
+                 targetFaceIndex: port.faceIndex,
+                 cargo: {
+                   population: 20,
+                   water: 500,
+                   food: 500,
+                   goods: 500,
+                   oxygen: 500,
+                   minerals: 0
+                 }
               });
-            });
-          }
+            }
+          });
         }
+        // Spaceship Logistics
+        store.spaceships.forEach(ship => {
+          if (ship.status === 'EN_ROUTE_TO_MOON' || ship.status === 'EN_ROUTE_TO_EARTH') {
+             const newProgress = ship.progress + (inGameHoursElapsed / 72); // 3 days transit
+             if (newProgress >= 1) {
+               if (ship.status === 'EN_ROUTE_TO_MOON') {
+                 // Arrived at Moon! Unload cargo immediately.
+                 let newCargo = { ...ship.cargo };
+                 const spaceport = spaceports.find(sp => sp.faceIndex === ship.targetFaceIndex);
+                 
+                 if (spaceport) {
+                   if (newCargo.population > 0) {
+                      let probability = 0;
+                      if (store.prosperity >= 0) {
+                        probability = Math.max(0, Math.min(1, 0.10 + (store.prosperity * 0.009)));
+                      }
+                      
+                      let willingToStay = 0;
+                      for (let i = 0; i < newCargo.population; i++) {
+                        if (Math.random() < probability) willingToStay++;
+                      }
 
-      // 1. Solar Panels
+                      const connectedHabitations = new Set<Building>();
+                      findReachable(spaceport.faceIndex, bothGraph, ['HABITATION'], 'both').forEach(hab => connectedHabitations.add(hab));
+                      Array.from(connectedHabitations).forEach(hab => {
+                        const currentHab = getB(hab.id);
+                        const space = (currentHab.populationMax || 20) - (currentHab.population || 0);
+                        if (space > 0 && willingToStay > 0) {
+                          const toAdd = Math.min(space, willingToStay);
+                          updateB(hab.id, { population: (currentHab.population || 0) + toAdd });
+                          willingToStay -= toAdd;
+                          newCargo.population -= toAdd;
+                        }
+                      });
+                   }
+                   const connectedWarehouses = new Set<Building>();
+                   findReachable(spaceport.faceIndex, bothGraph, ['WAREHOUSE'], 'both').forEach(wh => connectedWarehouses.add(wh));
+                   Array.from(connectedWarehouses).forEach(wh => {
+                      const currentWh = getB(wh.id);
+                      if (newCargo.water > 0 && currentWh.waterMax && currentWh.waterStored !== undefined) {
+                         const space = currentWh.waterMax - currentWh.waterStored;
+                         const toAdd = Math.min(space, newCargo.water);
+                         updateB(wh.id, { waterStored: currentWh.waterStored + toAdd });
+                         newCargo.water -= toAdd;
+                      }
+                      if (newCargo.food > 0 && currentWh.foodMax && currentWh.foodStored !== undefined) {
+                         const space = currentWh.foodMax - currentWh.foodStored;
+                         const toAdd = Math.min(space, newCargo.food);
+                         updateB(wh.id, { foodStored: currentWh.foodStored + toAdd });
+                         newCargo.food -= toAdd;
+                      }
+                      if (newCargo.goods > 0 && currentWh.goodsMax && currentWh.goodsStored !== undefined) {
+                         const space = currentWh.goodsMax - currentWh.goodsStored;
+                         const toAdd = Math.min(space, newCargo.goods);
+                         updateB(wh.id, { goodsStored: currentWh.goodsStored + toAdd });
+                         newCargo.goods -= toAdd;
+                      }
+                      if (newCargo.oxygen > 0 && currentWh.oxygenMax && currentWh.oxygenStored !== undefined) {
+                         const space = currentWh.oxygenMax - currentWh.oxygenStored;
+                         const toAdd = Math.min(space, newCargo.oxygen);
+                         updateB(wh.id, { oxygenStored: currentWh.oxygenStored + toAdd });
+                         newCargo.oxygen -= toAdd;
+                      }
+                   });
+                 }
+                 // Switch to DOCKED and reset progress to act as a docking timer
+                 store.updateSpaceship(ship.id, { progress: 0, status: 'DOCKED', cargo: newCargo });
+               } else {
+                 store.removeSpaceship(ship.id);
+               }
+             } else {
+               store.updateSpaceship(ship.id, { progress: newProgress });
+             }
+          } else if (ship.status === 'DOCKED') {
+             // Wait 1 day at the spaceport
+             const newProgress = ship.progress + (inGameHoursElapsed / 24);
+             if (newProgress >= 1) {
+               // Depart for Earth
+               store.updateSpaceship(ship.id, { status: 'EN_ROUTE_TO_EARTH', progress: 0 });
+             } else {
+               store.updateSpaceship(ship.id, { progress: newProgress });
+             }
+          }
+        });
+        // 1. Solar Panels
       const panels = store.buildings.filter(b => b.type === 'SOLAR_PANEL' && b.status === 'OPERATIONAL' && b.isOn !== false);
       panels.forEach(panel => {
         const center = getFaceCenter(panel.faceIndex);
@@ -287,6 +346,23 @@ export function GameEngine() {
         const currentCore = getB(core.id);
         const newEnergy = Math.max(0, currentCore.energyStored - (1 * inGameHoursElapsed));
         if (newEnergy !== currentCore.energyStored) updateB(core.id, { energyStored: newEnergy });
+      });
+
+      // 2.5 Spaceport consumes 2 E/h to stay powered
+      store.buildings.filter(b => b.type === 'SPACEPORT' && b.status === 'OPERATIONAL' && b.isOn !== false).forEach(port => {
+        const energyNeeded = 2 * inGameHoursElapsed;
+        const liveSources = findReachable(port.faceIndex, inGraph, ['BATTERY', 'CORE'], 'in').map(s => getB(s.id));
+        const totalAvailable = liveSources.reduce((sum, b) => sum + b.energyStored, 0);
+        
+        if (totalAvailable >= energyNeeded) {
+          if (!getB(port.id).isPowered) updateB(port.id, { isPowered: true });
+          liveSources.forEach(s => {
+            const draw = Math.min(s.energyStored, energyNeeded * (s.energyStored / totalAvailable));
+            updateB(s.id, { energyStored: s.energyStored - draw });
+          });
+        } else {
+          if (getB(port.id).isPowered !== false) updateB(port.id, { isPowered: false });
+        }
       });
 
       // Habitation Consumption Logic
@@ -326,9 +402,9 @@ export function GameEngine() {
           }
           
           if (!waterMet || !foodMet || !goodsMet || !oxygenMet) {
-            totalProsperityDelta -= pop * inGameHoursElapsed * 0.5;
+            totalProsperityDelta -= pop * inGameHoursElapsed * 0.005;
           } else {
-            totalProsperityDelta += pop * inGameHoursElapsed * 0.5;
+            totalProsperityDelta += pop * inGameHoursElapsed * 0.001;
           }
         }
       });
@@ -336,10 +412,10 @@ export function GameEngine() {
       let intrinsicProsperityDelta = 0;
       const poweredSpaceports = spaceports.filter(b => b.isPowered && b.isOn !== false);
       if (poweredSpaceports.length > 0) {
-        intrinsicProsperityDelta += 0.5 * inGameHoursElapsed;
+        intrinsicProsperityDelta += 0.01 * inGameHoursElapsed;
       }
       if (store.prosperity < 0) {
-        intrinsicProsperityDelta += 1.0 * inGameHoursElapsed;
+        intrinsicProsperityDelta += 0.05 * inGameHoursElapsed;
       }
 
       if (Math.abs(totalProsperityDelta) > 0 || intrinsicProsperityDelta !== 0) {
