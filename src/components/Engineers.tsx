@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore, Team } from '@/store/useGameStore';
 import { buildAdjacencyGraph, findShortestPath } from '@/utils/geometryGraph';
@@ -35,12 +36,47 @@ function getFaceCenterAndNormal(geometry: THREE.BufferGeometry, faceIndex: numbe
 }
 
 export default function Engineers({ geometry }: EngineersProps) {
-  const { teams, setTeamPath, updateTeamProgress, setSelectedTeam, selectedTeamId, timeScale } = useGameStore();
+  const { teams, setTeamPath, updateTeamProgress, setSelectedTeam, selectedTeamId, selectedCellId, timeScale } = useGameStore();
   
   const graph = useMemo(() => buildAdjacencyGraph(geometry), [geometry]);
 
+  // Compute preview path if we have a selected engineer and a selected destination cell
+  const previewPath = useMemo(() => {
+    if (!selectedTeamId || !selectedCellId) return null;
+    const team = teams.find(t => t.id === selectedTeamId);
+    if (!team || team.faceIndex === null) return null;
+    
+    const targetFace = parseInt(selectedCellId, 10);
+    // Don't draw if already at target or currently moving to it
+    if (team.faceIndex === targetFace || team.targetFaceIndex === targetFace) return null;
+    
+    return findShortestPath(team.faceIndex, targetFace, graph);
+  }, [selectedTeamId, selectedCellId, teams, graph]);
+
+  // Convert preview path to Vector3 points
+  const previewPoints = useMemo(() => {
+    if (!previewPath || previewPath.length < 2) return null;
+    return previewPath.map(faceIdx => {
+      const { center, normal } = getFaceCenterAndNormal(geometry, faceIdx);
+      return center.add(normal.multiplyScalar(0.15)); // Slightly above terrain
+    });
+  }, [previewPath, geometry]);
+
   return (
     <group>
+      {previewPoints && (
+        <Line 
+          points={previewPoints} 
+          color="#00ffcc" 
+          lineWidth={2} 
+          dashed={true} 
+          dashSize={0.5} 
+          dashScale={1}
+          gapSize={0.25}
+          opacity={0.6}
+          transparent
+        />
+      )}
       {teams.filter(t => t.status !== 'AVAILABLE').map(team => (
         <EngineerToken 
           key={team.id} 

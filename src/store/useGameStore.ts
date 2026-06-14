@@ -142,6 +142,15 @@ interface GameState {
   };
   toggleFilter: (filterName: keyof GameState['filters']) => void;
 
+  audioMood: 'NONE' | 'SPACE' | 'JAZZ' | 'BREAKBEAT';
+  setAudioMood: (mood: 'NONE' | 'SPACE' | 'JAZZ' | 'BREAKBEAT') => void;
+  
+  audioDeviceId: string;
+  setAudioDeviceId: (id: string) => void;
+  
+  audioConnectionType: 'SPEAKERS' | 'HEADPHONES';
+  setAudioConnectionType: (type: 'SPEAKERS' | 'HEADPHONES') => void;
+
   cameraTarget: { 
     type: 'ENTITY' | 'CELESTIAL';
     id: string; // 'sun', 'earth', 'moon', or entity ID
@@ -171,6 +180,9 @@ interface GameState {
   loadLayout: (id: string) => void;
   deleteLayout: (id: string) => void;
   renameLayout: (id: string, newName: string) => void;
+
+  sfxEnabled: boolean;
+  setSfxEnabled: (enabled: boolean) => void;
 }
 
 // Start at year 2142, Jan 1st
@@ -179,7 +191,12 @@ const START_TIME = new Date("2142-01-01T08:00:00Z").getTime();
 export const useGameStore = create<GameState>((set) => ({
   selectedCellId: null,
   selectedCoordinates: null,
-  setSelectedCell: (id, coords) => set({ selectedCellId: id, selectedCoordinates: coords || null }),
+  setSelectedCell: (id, coords) => set((state) => {
+    if (state.sfxEnabled && id !== state.selectedCellId) {
+      import('@/audio/SFXEngine').then(({ sfxEngine }) => sfxEngine.playSelectCell());
+    }
+    return { selectedCellId: id, selectedCoordinates: coords || null };
+  }),
 
   timeScale: 1,
   setTimeScale: (scale) => set({ timeScale: scale }),
@@ -202,6 +219,38 @@ export const useGameStore = create<GameState>((set) => ({
       [filterName]: !state.filters[filterName]
     }
   })),
+
+  audioMood: 'NONE',
+  setAudioMood: (mood) => set((state) => {
+    import('@/audio/AdaptiveSynth').then(({ adaptiveSynth }) => {
+      adaptiveSynth.setMood(mood);
+    });
+    return { audioMood: mood };
+  }),
+
+  audioDeviceId: 'default',
+  setAudioDeviceId: (id) => set((state) => {
+    import('@/audio/AdaptiveSynth').then(({ adaptiveSynth }) => {
+      adaptiveSynth.setAudioDevice(id);
+    });
+    return { audioDeviceId: id };
+  }),
+
+  audioConnectionType: 'SPEAKERS',
+  setAudioConnectionType: (type) => set((state) => {
+    import('@/audio/AdaptiveSynth').then(({ adaptiveSynth }) => {
+      adaptiveSynth.setConnectionType(type);
+    });
+    return { audioConnectionType: type };
+  }),
+
+  sfxEnabled: true,
+  setSfxEnabled: (enabled) => set((state) => {
+    import('@/audio/SFXEngine').then(({ sfxEngine }) => {
+      sfxEngine.setEnabled(enabled);
+    });
+    return { sfxEnabled: enabled };
+  }),
 
   cameraTarget: null,
   focusTarget: (target) => {
@@ -255,6 +304,9 @@ export const useGameStore = create<GameState>((set) => ({
   }),
 
   queueBuildJob: (teamId, job) => set((state) => {
+    if (state.sfxEnabled) {
+      import('@/audio/SFXEngine').then(({ sfxEngine }) => sfxEngine.playPlaceStructure());
+    }
     return {
       teams: state.teams.map(t => {
         if (t.id === teamId) {
@@ -281,6 +333,9 @@ export const useGameStore = create<GameState>((set) => ({
   }),
 
   completeBuildJob: (teamId, buildingId) => set((state) => {
+    if (state.sfxEnabled) {
+      import('@/audio/SFXEngine').then(({ sfxEngine }) => sfxEngine.playStructureComplete());
+    }
     return {
       teams: state.teams.map(t => {
         if (t.id === teamId) {
@@ -408,23 +463,38 @@ export const useGameStore = create<GameState>((set) => ({
     { id: 'eng-3', name: 'ENGINEERING GAMMA', status: 'AVAILABLE', faceIndex: null, path: [], targetFaceIndex: null, arrivalTime: 0 },
   ],
   selectedTeamId: null,
-  setSelectedTeam: (id) => set({ selectedTeamId: id }),
+  setSelectedTeam: (id) => set((state) => {
+    if (state.sfxEnabled && id !== state.selectedTeamId) {
+      import('@/audio/SFXEngine').then(({ sfxEngine }) => sfxEngine.playSelectEngineer());
+    }
+    return { selectedTeamId: id };
+  }),
   
-  deployTeam: (teamId, faceIndex) => set((state) => ({
-    teams: state.teams.map(t => 
-      t.id === teamId 
-        ? { ...t, status: 'DEPLOYED', faceIndex, path: [], targetFaceIndex: null, arrivalTime: Date.now() } 
-        : t
-    )
-  })),
+  deployTeam: (teamId, faceIndex) => set((state) => {
+    if (state.sfxEnabled) {
+      import('@/audio/SFXEngine').then(({ sfxEngine }) => sfxEngine.playDeployCommand());
+    }
+    return {
+      teams: state.teams.map(t => 
+        t.id === teamId 
+          ? { ...t, status: 'DEPLOYED', faceIndex, path: [], targetFaceIndex: null, arrivalTime: Date.now() } 
+          : t
+      )
+    };
+  }),
 
-  moveTeam: (teamId, targetFaceIndex) => set((state) => ({
-    teams: state.teams.map(t =>
-      t.id === teamId
-        ? { ...t, targetFaceIndex, path: [], status: 'MOVING_TO' }
-        : t
-    )
-  })),
+  moveTeam: (teamId, targetFaceIndex) => set((state) => {
+    if (state.sfxEnabled) {
+      import('@/audio/SFXEngine').then(({ sfxEngine }) => sfxEngine.playMoveCommand());
+    }
+    return {
+      teams: state.teams.map(t =>
+        t.id === teamId
+          ? { ...t, targetFaceIndex, path: [], status: 'MOVING_TO' }
+          : t
+      )
+    };
+  }),
 
   setTeamPath: (teamId, path) => set((state) => ({
     teams: state.teams.map(t =>

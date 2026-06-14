@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useGameStore } from '@/store/useGameStore';
 import * as THREE from 'three';
 import { getFaceCenter, vector3ToCoord } from '@/utils/geo';
@@ -8,7 +9,6 @@ import Clock from './Clock';
 import CameraControls from './CameraControls';
 import VisualFilters from './VisualFilters';
 import SearchUI from './SearchUI';
-import { useState, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 function formatCoords(lat: number, lon: number) {
@@ -64,8 +64,68 @@ export default function TerminalUI() {
     saveLayout,
     loadLayout,
     deleteLayout,
-    renameLayout
+    renameLayout,
+    audioMood,
+    setAudioMood,
+    audioDeviceId,
+    setAudioDeviceId,
+    audioConnectionType,
+    setAudioConnectionType,
+    sfxEnabled,
+    setSfxEnabled
   } = useGameStore();
+
+  useEffect(() => {
+    if (!sfxEnabled) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Only play click if it's a button and not a disabled button
+      if ((target.tagName === 'BUTTON' || target.closest('button')) && !(target as HTMLButtonElement).disabled && !(target.closest('button') as HTMLButtonElement)?.disabled) {
+        import('@/audio/SFXEngine').then(({ sfxEngine }) => sfxEngine.playClick());
+      }
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, [sfxEnabled]);
+
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [hasAudioPermissions, setHasAudioPermissions] = useState(false);
+
+  const getDevices = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
+      setAudioDevices(audioOutputs);
+      
+      // If we see labels, we have permissions
+      if (audioOutputs.some(d => d.label && d.label.length > 0)) {
+        setHasAudioPermissions(true);
+      }
+    } catch (err) {
+      console.warn('Could not enumerate audio devices:', err);
+    }
+  };
+
+  useEffect(() => {
+    getDevices();
+    navigator.mediaDevices?.addEventListener('devicechange', getDevices);
+    return () => {
+      navigator.mediaDevices?.removeEventListener('devicechange', getDevices);
+    };
+  }, []);
+
+  const requestDevicePermissions = async () => {
+    try {
+      // Request mic permission just to unlock the hardware labels for audio output
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Immediately stop the mic, we only needed the permission token
+      stream.getTracks().forEach(track => track.stop());
+      await getDevices();
+    } catch (err) {
+      console.warn('Permission denied for device labels:', err);
+    }
+  };
 
   const selectedBuilding = useGameStore(useShallow(state => 
     selectedCellId ? state.buildings.find(b => b.faceIndex === parseInt(selectedCellId, 10)) : undefined
@@ -203,7 +263,138 @@ export default function TerminalUI() {
             <VisualFilters />
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 mb-4 border-b border-green-500/30 pb-4">
+            <p className="text-xs text-purple-400 mb-1 font-bold">UI SOUND EFFECTS</p>
+            <div className="flex gap-2 mb-2">
+              <button 
+                onClick={() => setSfxEnabled(true)}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  sfxEnabled 
+                    ? 'bg-purple-500/20 border-purple-500 text-purple-400' 
+                    : 'border-purple-500/30 text-purple-500/50 hover:border-purple-500/50 hover:text-purple-500'
+                }`}
+              >
+                ON
+              </button>
+              <button 
+                onClick={() => setSfxEnabled(false)}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  !sfxEnabled 
+                    ? 'bg-purple-500/20 border-purple-500 text-purple-400' 
+                    : 'border-purple-500/30 text-purple-500/50 hover:border-purple-500/50 hover:text-purple-500'
+                }`}
+              >
+                OFF
+              </button>
+            </div>
+            
+            <p className="text-xs text-purple-400 mb-1 font-bold">ADAPTIVE MUSIC</p>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setAudioMood('NONE')}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  audioMood === 'NONE' 
+                    ? 'bg-red-500/20 border-red-500 text-red-400' 
+                    : 'border-gray-500/30 text-gray-500 hover:border-gray-500/50 hover:text-gray-400'
+                }`}
+              >
+                MUTED
+              </button>
+              <button 
+                onClick={() => setAudioMood('SPACE')}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  audioMood === 'SPACE' 
+                    ? 'bg-purple-500/20 border-purple-500 text-purple-400' 
+                    : 'border-purple-500/30 text-purple-500/50 hover:border-purple-500/50 hover:text-purple-500'
+                }`}
+              >
+                DEEP SPACE
+              </button>
+              <button 
+                onClick={() => setAudioMood('JAZZ')}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  audioMood === 'JAZZ' 
+                    ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' 
+                    : 'border-yellow-500/30 text-yellow-500/50 hover:border-yellow-500/50 hover:text-yellow-500'
+                }`}
+              >
+                JAZZ
+              </button>
+              <button 
+                onClick={() => setAudioMood('BREAKBEAT')}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  audioMood === 'BREAKBEAT' 
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400' 
+                    : 'border-cyan-500/30 text-cyan-500/50 hover:border-cyan-500/50 hover:text-cyan-500'
+                }`}
+              >
+                BREAKBEAT
+              </button>
+            </div>
+            <p className="text-[9px] text-gray-500 italic mt-1 leading-tight">
+              Adaptive generative music system. Morphs tempo and instrumentation in real-time.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 mb-4 border-b border-green-500/30 pb-4">
+            <p className="text-xs text-purple-400 mb-1 font-bold">AUDIO CONNECTION PROFILE</p>
+            <div className="flex gap-2 mb-2">
+              <button 
+                onClick={() => setAudioConnectionType('SPEAKERS')}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  audioConnectionType === 'SPEAKERS' 
+                    ? 'bg-blue-500/20 border-blue-500 text-blue-400' 
+                    : 'border-blue-500/30 text-blue-500/50 hover:border-blue-500/50 hover:text-blue-500'
+                }`}
+              >
+                SPEAKERS
+              </button>
+              <button 
+                onClick={() => setAudioConnectionType('HEADPHONES')}
+                className={`flex-1 py-1 px-1 border transition-colors font-bold text-[10px] md:text-xs ${
+                  audioConnectionType === 'HEADPHONES' 
+                    ? 'bg-orange-500/20 border-orange-500 text-orange-400' 
+                    : 'border-orange-500/30 text-orange-500/50 hover:border-orange-500/50 hover:text-orange-500'
+                }`}
+              >
+                HEADPHONES
+              </button>
+            </div>
+            
+            <p className="text-xs text-purple-400 mb-1 font-bold flex justify-between items-center">
+              <span>AUDIO OUTPUT DEVICE</span>
+              {!hasAudioPermissions && (
+                <button 
+                  onClick={requestDevicePermissions}
+                  className="text-[9px] bg-green-500/20 text-green-400 border border-green-500/50 px-2 py-0.5 hover:bg-green-500/40"
+                >
+                  SHOW DEVICE NAMES
+                </button>
+              )}
+            </p>
+            <select
+              value={audioDeviceId}
+              onChange={(e) => setAudioDeviceId(e.target.value)}
+              className="w-full bg-black/50 border border-green-500/50 text-green-500 text-xs py-1 px-2 focus:outline-none focus:border-green-400"
+            >
+              <option value="default">Default OS Device</option>
+              {audioDevices.map((device, index) => {
+                if (device.deviceId === 'default') return null; // Skip duplicate default
+                return (
+                  <option key={device.deviceId || index} value={device.deviceId}>
+                    {device.label || `Unknown Device ${index + 1}`}
+                  </option>
+                );
+              })}
+            </select>
+            {!hasAudioPermissions && (
+              <p className="text-[9px] text-gray-500 italic mt-1 leading-tight">
+                Click "Show Device Names" (requires mic permission) to see if you are connected to "Stereo" (High Quality) or "Hands-Free" (Low Quality).
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 mb-4 border-b border-green-500/30 pb-4">
             <p className="text-xs text-blue-400 mb-1 font-bold">BASE LAYOUTS</p>
             <div className="flex gap-2 mb-2">
               <input 
